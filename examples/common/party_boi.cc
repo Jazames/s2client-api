@@ -25,6 +25,9 @@ public:
             TryMassAttack();
             TryExpand();
             TryBuildEngineeringBay();
+            TryBuildFactory();
+            TryBuildArmory();
+            TryBuildStarport();
         }
         virtual void OnUnitCreated(const Unit* unit) final {
             //Now try telling all Idle buildings to start working again.
@@ -89,14 +92,26 @@ public:
                     Actions()->UnitCommand(unit, ABILITY_ID::RESEARCH_COMBATSHIELD);
                     Actions()->UnitCommand(unit, ABILITY_ID::RESEARCH_CONCUSSIVESHELLS);
                     Actions()->UnitCommand(unit, ABILITY_ID::RESEARCH_STIMPACK);
+                    break;
+                case UNIT_TYPEID::TERRAN_STARPORT:
+                    TryBuildMedivac(unit);
                 default:
                     break;
+            }
+        }
+        virtual void OnUnitDestroyed(const Unit* unit)
+        {
+            //Now try telling all Idle buildings to start working again.
+            auto lazy_doodz = Observation()->GetUnits(Unit::Alliance::Self, IsIdle());
+            for(auto laze : lazy_doodz){
+                OnUnitIdle(laze);
             }
         }
         virtual void OnUnitEnterVision(const Unit* unit)
         {
             auto doodz = Observation()->GetUnits(Unit::Alliance::Self, IsArmy(Observation()));
             bool queue_order = (Observation()->GetUnits(Unit::Alliance::Enemy).size() > 4);
+            Actions()->UnitCommand(doodz, ABILITY_ID::SCAN_MOVE, unit->pos, queue_order);
             Actions()->UnitCommand(doodz, ABILITY_ID::ATTACK_ATTACK, unit->pos, queue_order);
         }
     private:
@@ -187,14 +202,8 @@ public:
                 }
             }
             
-            
-            if(Observation()->GetFoodWorkers() > 66)
+            if(Observation()->GetFoodUsed() < townhalls * 40 && Observation()->GetMinerals() < 8000)
             {
-                return false;
-            }
-            if(Observation()->GetFoodUsed() < townhalls * 40)
-            {
-                
                 return false;
             }
             
@@ -266,6 +275,9 @@ public:
             if(start_saving_for_expand){
                 return false;
             }
+            if((CountUnitType(Observation(), UNIT_TYPEID::TERRAN_BARRACKS) < 1)){
+                return false;
+            }
             if((CountUnitType(Observation(), UNIT_TYPEID::TERRAN_ENGINEERINGBAY) > 0))
             {
                 return false;
@@ -282,6 +294,76 @@ public:
                                      Point2D(builder->pos.x + rx * 15.0f, builder->pos.y + ry * 15.0f)
                                      );
         }
+        bool TryBuildFactory(){
+            if(start_saving_for_expand){
+                return false;
+            }
+            if((CountUnitType(Observation(), UNIT_TYPEID::TERRAN_BARRACKS) < 2)){
+                return false;
+            }
+            if((CountUnitType(Observation(), UNIT_TYPEID::TERRAN_FACTORY) > 0))
+            {
+                return false;
+            }
+            
+            //Try to make a barracks
+            float rx = GetRandomScalar();
+            float ry = GetRandomScalar();
+            
+            auto builder = GetBuilder();
+            
+            return TryBuildStructure(ABILITY_ID::BUILD_FACTORY,
+                                     builder,
+                                     Point2D(builder->pos.x + rx * 15.0f, builder->pos.y + ry * 15.0f)
+                                     );
+        }
+        bool TryBuildArmory(){
+            if(start_saving_for_expand){
+                return false;
+            }
+            if((CountUnitType(Observation(), UNIT_TYPEID::TERRAN_FACTORY) < 1)){
+                return false;
+            }
+            if((CountUnitType(Observation(), UNIT_TYPEID::TERRAN_ARMORY) > 0))
+            {
+                return false;
+            }
+            
+            //Try to make a barracks
+            float rx = GetRandomScalar();
+            float ry = GetRandomScalar();
+            
+            auto builder = GetBuilder();
+            
+            return TryBuildStructure(ABILITY_ID::BUILD_ARMORY,
+                                     builder,
+                                     Point2D(builder->pos.x + rx * 15.0f, builder->pos.y + ry * 15.0f)
+                                     );
+        }
+        bool TryBuildStarport(){
+            if(start_saving_for_expand){
+                return false;
+            }
+            if((CountUnitType(Observation(), UNIT_TYPEID::TERRAN_ARMORY) < 1)){
+                return false;
+            }
+            if((CountUnitType(Observation(), UNIT_TYPEID::TERRAN_STARPORT) * 3 > CountUnitType(Observation(), UNIT_TYPEID::TERRAN_BARRACKS)))
+            {
+                return false;
+            }
+            
+            //Try to make a barracks
+            float rx = GetRandomScalar();
+            float ry = GetRandomScalar();
+            
+            auto builder = GetBuilder();
+            
+            return TryBuildStructure(ABILITY_ID::BUILD_STARPORT,
+                                     builder,
+                                     Point2D(builder->pos.x + rx * 15.0f, builder->pos.y + ry * 15.0f)
+                                     );
+        }
+               
         
         bool TryMassAttack()
         {
@@ -299,6 +381,7 @@ public:
             Point2D target;
             FindEnemyPosition(target);
             auto doodz = Observation()->GetUnits(Unit::Alliance::Self, IsArmy(Observation()));
+            Actions()->UnitCommand(doodz, ABILITY_ID::SCAN_MOVE, target);
             Actions()->UnitCommand(doodz, ABILITY_ID::ATTACK_ATTACK, target);
         
             order_given = true;
@@ -338,11 +421,29 @@ public:
             return true;
         }
         
+        bool TryBuildMedivac(const Unit* starport)
+        {
+            if(start_saving_for_expand){
+                return false;
+            }
+            if(starport->unit_type != UNIT_TYPEID::TERRAN_STARPORT){
+                return false;
+            }
+            Actions()->UnitCommand(starport, ABILITY_ID::TRAIN_MEDIVAC);
+        
+            return true;
+        }
+        
         bool TryBuildSCV(const Unit* command_center){
             
             //If the unit is not a town hall, quit now!
             //Hopefully this function is never given a non-town hall, but you never know.
             if(!IsTownHall()(*command_center)){
+                return false;
+            }
+            
+            //We don't need too many doodz. 
+            if(Observation()->GetFoodWorkers() > 70){
                 return false;
             }
             
