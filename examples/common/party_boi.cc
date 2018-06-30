@@ -504,7 +504,7 @@ public:
         bool start_saving_for_expand = false;
 };
         
-        
+  /*
         int main(int argc, char* argv[]) {
             Coordinator coordinator;
             coordinator.LoadSettings(argc, argv);
@@ -520,3 +520,4 @@ public:
             while(coordinator.Update());
             return 0;
         }
+   */
