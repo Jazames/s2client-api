@@ -19,7 +19,6 @@ public:
 
     virtual void OnStep() final {
         uint32_t game_loop = Observation()->GetGameLoop();
-
         if (game_loop % 100 == 0) {
             sc2::Units units = Observation()->GetUnits(sc2::Unit::Alliance::Self);
             for (auto& it_unit : units) {

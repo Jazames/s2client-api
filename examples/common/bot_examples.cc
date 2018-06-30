@@ -2920,6 +2920,7 @@ bool TerranMultiplayerBot::BuildRefinery() {
     }
     return false;
 }
+
 void TerranMultiplayerBot::OnStep() {
 
 
