@@ -43,6 +43,7 @@ example_project(annoying_helper "annoying_helper.cc")
 example_project(party_boi "party_boi.cc")
 example_project(proxy "proxy.cc")
 example_project(save_load "save_load.cc")
+example_project(JohnBot "JohnBot.cc")
 # example_project(bot_mp_ipv6 "bot_mp_ipv6.cc")
 
 if (NOT APPLE)
