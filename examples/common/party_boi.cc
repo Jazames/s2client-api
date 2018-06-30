@@ -26,6 +26,12 @@ public:
             TryExpand();
         }
         virtual void OnUnitCreated(const Unit* unit) final {
+            //Now try telling all Idle buildings to start working again.
+            auto lazy_doodz = Observation()->GetUnits(Unit::Alliance::Self, IsIdle());
+            for(auto laze : lazy_doodz){
+                OnUnitIdle(laze);
+            }
+            
             //std::cout << "Unit created: " << unit->unit_type.to_string() << std::endl;
             switch(unit->unit_type.ToType())
             {
@@ -47,6 +53,7 @@ public:
             }
         }
         virtual void OnUnitIdle(const Unit* unit) final {
+            //std::cout << "Unit order size: " << unit->orders.size() << std::endl;
             switch(unit->unit_type.ToType())
             {
                 case UNIT_TYPEID::TERRAN_COMMANDCENTER:{
@@ -68,7 +75,8 @@ public:
         virtual void OnUnitEnterVision(const Unit* unit)
         {
             auto doodz = Observation()->GetUnits(Unit::Alliance::Self, IsArmy(Observation()));
-            Actions()->UnitCommand(doodz, ABILITY_ID::ATTACK_ATTACK, unit->pos, true);
+            bool queue_order = (Observation()->GetUnits(Unit::Alliance::Enemy).size() > 4);
+            Actions()->UnitCommand(doodz, ABILITY_ID::ATTACK_ATTACK, unit->pos, queue_order);
         }
     private:
         struct IsTownHall {
@@ -122,6 +130,12 @@ public:
                     case UNIT_TYPEID::NEUTRAL_PROTOSSVESPENEGEYSER: return true;
                     default: return false;
                 }
+            }
+        };
+        
+        struct IsIdle {
+            bool operator()(const Unit& unit) {
+                return unit.orders.size() == 0;
             }
         };
         
