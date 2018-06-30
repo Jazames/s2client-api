@@ -11,12 +11,12 @@ int main(int argc, char* argv[]) {
     coordinator.LoadSettings(argc, argv);
 
     Party_Boi boi;
-    Bot bot;
+    JohnBot bot;
     
     coordinator.SetParticipants({
         CreateParticipant(Race::Terran, &boi),
-        CreateParticipant(Race::Terran, &bot)
-        //CreateComputer(Race::Zerg, Difficulty::Medium)
+        CreateParticipant(Race::Zerg, &bot)
+       // CreateComputer(Race::Zerg, Difficulty::VeryEasy)
         });
 
     coordinator.LaunchStarcraft();
