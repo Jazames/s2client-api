@@ -24,6 +24,7 @@ public:
             TryBuildBarracks();
             TryMassAttack();
             TryExpand();
+            TryBuildEngineeringBay();
         }
         virtual void OnUnitCreated(const Unit* unit) final {
             //Now try telling all Idle buildings to start working again.
@@ -65,9 +66,29 @@ public:
                     MineIdleWorkers(unit, ABILITY_ID::HARVEST_GATHER_SCV);
                     break;
                 }
+                case UNIT_TYPEID::TERRAN_BARRACKSFLYING:
                 case UNIT_TYPEID::TERRAN_BARRACKS:{
-                    TryBuildSoldier(unit);
+                    //std::cout << Observation()->GetUnit(unit->add_on_tag) << std::endl;
+                    if(Observation()->GetUnit(unit->add_on_tag)){//->unit_type == UNIT_TYPEID::TERRAN_REACTOR){
+                        TryBuildSoldier(unit);
+                        //TryBuildSoldier(unit);
+                    }
+                    else if(CountUnitType(Observation(), UNIT_TYPEID::TERRAN_BARRACKSREACTOR) < CountUnitType(Observation(), UNIT_TYPEID::TERRAN_BARRACKSTECHLAB)){
+                        TryBuildAddon(unit, ABILITY_ID::BUILD_REACTOR_BARRACKS);
+                    }
+                    else {
+                        TryBuildAddon(unit, ABILITY_ID::BUILD_TECHLAB_BARRACKS);
+                    }
+                    break;
                 }
+                case UNIT_TYPEID::TERRAN_ENGINEERINGBAY:
+                    Actions()->UnitCommand(unit, ABILITY_ID::RESEARCH_TERRANINFANTRYWEAPONS);
+                    Actions()->UnitCommand(unit, ABILITY_ID::RESEARCH_TERRANINFANTRYARMOR);
+                    break;
+                case UNIT_TYPEID::TERRAN_BARRACKSTECHLAB:
+                    Actions()->UnitCommand(unit, ABILITY_ID::RESEARCH_COMBATSHIELD);
+                    Actions()->UnitCommand(unit, ABILITY_ID::RESEARCH_CONCUSSIVESHELLS);
+                    Actions()->UnitCommand(unit, ABILITY_ID::RESEARCH_STIMPACK);
                 default:
                     break;
             }
@@ -138,6 +159,17 @@ public:
                 return unit.orders.size() == 0;
             }
         };
+        
+        bool TryBuildAddon(const Unit* unit_to_build, ABILITY_ID ability_id_for_build_type)
+        {
+            float rx = GetRandomScalar();
+            float ry = GetRandomScalar();
+            
+            return TryBuildStructure(ability_id_for_build_type,
+                                     unit_to_build,
+                                     Point2D(unit_to_build->pos.x + rx * 15.0f, unit_to_build->pos.y + ry * 15.0f)
+                                     );
+        }
         
         bool TryExpand() {
             auto townhalls = CountUnitType(Observation(), UNIT_TYPEID::TERRAN_COMMANDCENTER) +
@@ -229,6 +261,28 @@ public:
                                      );
         }
         
+        bool TryBuildEngineeringBay()
+        {
+            if(start_saving_for_expand){
+                return false;
+            }
+            if((CountUnitType(Observation(), UNIT_TYPEID::TERRAN_ENGINEERINGBAY) > 0))
+            {
+                return false;
+            }
+            
+            //Try to make a barracks
+            float rx = GetRandomScalar();
+            float ry = GetRandomScalar();
+            
+            auto builder = GetBuilder();
+            
+            return TryBuildStructure(ABILITY_ID::BUILD_ENGINEERINGBAY,
+                                     builder,
+                                     Point2D(builder->pos.x + rx * 15.0f, builder->pos.y + ry * 15.0f)
+                                     );
+        }
+        
         bool TryMassAttack()
         {
             static bool order_given = false;
@@ -244,7 +298,7 @@ public:
             }
             Point2D target;
             FindEnemyPosition(target);
-            auto doodz = Observation()->GetUnits(Unit::Alliance::Self);
+            auto doodz = Observation()->GetUnits(Unit::Alliance::Self, IsArmy(Observation()));
             Actions()->UnitCommand(doodz, ABILITY_ID::ATTACK_ATTACK, target);
         
             order_given = true;
@@ -271,7 +325,16 @@ public:
             if(barracks->unit_type != UNIT_TYPEID::TERRAN_BARRACKS){
                 return false;
             }
-            Actions()->UnitCommand(barracks, ABILITY_ID::TRAIN_MARINE);
+            if(barracks->add_on_tag && Observation()->GetUnit(barracks->add_on_tag)->unit_type == UNIT_TYPEID::TERRAN_BARRACKSTECHLAB){
+                Actions()->UnitCommand(barracks, ABILITY_ID::TRAIN_MARAUDER);
+            }
+            else if(barracks->add_on_tag){
+                Actions()->UnitCommand(barracks, ABILITY_ID::TRAIN_MARINE);
+                Actions()->UnitCommand(barracks, ABILITY_ID::TRAIN_MARINE);
+            }
+            else{
+                Actions()->UnitCommand(barracks, ABILITY_ID::TRAIN_MARINE);
+            }
             return true;
         }
         
