@@ -18,15 +18,19 @@ struct IsVespeneGeyser {
 class JohnBot : public Agent {
 public:
     virtual void OnGameStart() final {
-        std::cout << "ZingRushS" << std::endl;
+        std::cout << "ZingRush1" << std::endl;
     }
 
     virtual void OnStep() {
         const ObservationInterface* observation = Observation();
+        uint32_t game_loop = Observation()->GetGameLoop();
         ManageLarva(observation);
         ManageStructures(observation);
         ManageArmy(observation);
-
+        if (game_loop % 30 == 0) {
+            ManageMining(observation);
+        }
+        
         // std::cout << Observation()->GetGameLoop() << std::endl;
     }
 
@@ -42,7 +46,7 @@ public:
         }
         case UNIT_TYPEID::ZERG_HATCHERY: {
             if (CountUnitType(UNIT_TYPEID::ZERG_SPAWNINGPOOL) >= 1) {
-                Actions()->UnitCommand(unit, ABILITY_ID::TRAIN_QUEEN);
+               // Actions()->UnitCommand(unit, ABILITY_ID::TRAIN_QUEEN);
             }
             break;
         }
@@ -80,7 +84,7 @@ private:
             for (const auto soldier : army) {
                 if (game_loop % 5 == 0)
                     AttackWithUnit(soldier, observation);
-            }
+            }  
         }
 
         return true;
@@ -100,11 +104,12 @@ private:
 
     bool ManageLarva(const ObservationInterface* observation) {
         const Unit* larva;
+        int optimal_drone = std::min((int)CountUnitType(UNIT_TYPEID::ZERG_HATCHERY) * 16, 48);
         if (GetRandomUnit(larva, observation, UNIT_TYPEID::ZERG_LARVA)) {
             if (observation->GetFoodUsed() > observation->GetFoodCap() - 6) {
                 TrainUnit(ABILITY_ID::TRAIN_OVERLORD, larva, observation);
             }
-            else if (CountUnitType(UNIT_TYPEID::ZERG_DRONE) < 16) {
+            else if (CountUnitType(UNIT_TYPEID::ZERG_DRONE) < 32) {
                 Actions()->UnitCommand(larva, ABILITY_ID::TRAIN_DRONE);
             }
             else if (CountUnitType(UNIT_TYPEID::ZERG_SPAWNINGPOOL) >= 1) {
@@ -112,7 +117,7 @@ private:
             }
             return true;
         }
-     
+
         return false;
     }
 
@@ -120,7 +125,7 @@ private:
         if (CountUnitType(UNIT_TYPEID::ZERG_DRONE) >= 16 && CountUnitType(UNIT_TYPEID::ZERG_SPAWNINGPOOL) < 1) {
             TryBuildStructure(ABILITY_ID::BUILD_SPAWNINGPOOL);
         }
-        if (CountUnitType(UNIT_TYPEID::ZERG_LARVA) <= 1 && observation->GetMinerals() >= 300) {
+        if (CountUnitType(UNIT_TYPEID::ZERG_LARVA) <= 1 && observation->GetMinerals() >= 300 && CountUnitType(UNIT_TYPEID::ZERG_HATCHERY) < 8) {
             TryBuildExpantion();
         }
         return true;
@@ -162,10 +167,55 @@ private:
         float ry = GetRandomScalar();
         Point2D buildPoint(unit_to_build->pos.x + rx * 15.0f, unit_to_build->pos.y + ry * 15.0f);
 
+
         if (unit_to_build != nullptr && observation->HasCreep(buildPoint))
             Actions()->UnitCommand(unit_to_build,
                 ability_Type_for_structure,
                 buildPoint);
+
+        return true;
+    }
+
+    bool NearestDrone(const Unit*& unit_out,const Unit* hive, const ObservationInterface* observation) {
+        Units drones = observation->GetUnits(Unit::Alliance::Self, IsUnit(UNIT_TYPEID::ZERG_DRONE));
+        const Unit* closest_drone = nullptr;
+        float distance = std::numeric_limits<float>::max();
+        for (const auto& drone : drones) {
+            float check_distance = Distance2D(hive->pos, drone->pos);
+            if (check_distance <= distance) {
+                closest_drone = drone;
+                distance = check_distance;
+            }
+        }
+        if (closest_drone == nullptr)
+            return false;
+        else {
+            unit_out = closest_drone;
+            return true;
+        }
+    }
+
+    bool ManageMining(const ObservationInterface* observation) {
+        Units townHalls = observation->GetUnits(Unit::Alliance::Self, IsUnit(UNIT_TYPEID::ZERG_HATCHERY));
+
+        for (const auto& hive : townHalls) {
+            // if has the ideal number of harvesters do nothing
+            if (hive->ideal_harvesters == 0) {
+                continue;
+            }
+
+            // if has too many harvesters, move a drone to annother base.
+            if (hive->assigned_harvesters > hive->ideal_harvesters) {
+                const Unit* drone = nullptr;
+                if (NearestDrone(drone, hive, observation)) {
+                    // send drone to next hive
+                    const Unit* other_hive = nullptr;
+                    if (GetRandomUnit(other_hive, observation, UNIT_TYPEID::ZERG_HATCHERY)) {
+                        Actions()->UnitCommand(drone, ABILITY_ID::SMART, other_hive->pos);
+                    }
+                }
+            }
+        }
 
         return true;
     }
