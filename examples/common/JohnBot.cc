@@ -77,17 +77,39 @@ private:
         return false;
     }
 
+
     bool ManageArmy(const ObservationInterface* observation) {
         uint32_t game_loop = Observation()->GetGameLoop();
         if (CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) > 20) {
             Units army = observation->GetUnits(Unit::Alliance::Self, IsUnit(UNIT_TYPEID::ZERG_ZERGLING));
+            static Point2D rally = army.front()->pos;
+            int armycount = 0;
             for (const auto soldier : army) {
-                if (game_loop % 5 == 0)
-                    AttackWithUnit(soldier, observation);
+                if (game_loop % 5 == 0) {
+                    // group up if not in one group
+                    if (CountNeibors(soldier, UNIT_TYPEID::ZERG_ZERGLING, 10.0f, observation) >= 15) {
+                        AttackWithUnit(soldier, observation);
+                    }
+                    else {
+                        Actions()->UnitCommand(soldier, ABILITY_ID::ATTACK_ATTACK, rally);
+                    }
+                }
             }  
         }
 
         return true;
+    }
+
+    size_t CountNeibors(const Unit* unit, UNIT_TYPEID unit_type, float distance, const ObservationInterface* observation) {
+        size_t neibors = 0;
+        Units freinds = observation->GetUnits(Unit::Alliance::Self, IsUnit(unit_type));
+
+        for (const auto& freind : freinds) {
+            if (Distance2D(freind->pos, unit->pos) <= distance) {
+                neibors++;
+            }
+        }
+        return neibors;
     }
 
     bool AttackWithUnit(const Unit* unit, const ObservationInterface* observation) {
@@ -113,8 +135,9 @@ private:
             ling_count = 200;
         }
         if (CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) > 20) {
-            drone_count = 32;
+            drone_count = CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) / 2;
         }
+        
         TryTrainUnits(UNIT_TYPEID::ZERG_DRONE, ABILITY_ID::TRAIN_DRONE, drone_count, observation);
         TryTrainUnits(UNIT_TYPEID::ZERG_OVERLORD, ABILITY_ID::TRAIN_OVERLORD, overlord_count, observation);
         TryTrainUnits(UNIT_TYPEID::ZERG_ZERGLING, ABILITY_ID::TRAIN_ZERGLING, ling_count, observation);

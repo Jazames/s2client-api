@@ -19,7 +19,7 @@ int main(int argc, char* argv[]) {
     coordinator.SetParticipants({
         CreateParticipant(Race::Terran, &boi),
         CreateParticipant(Race::Zerg, &bot)
-        //CreateComputer(Race::Random, Difficulty::Medium)
+       // CreateComputer(Race::Random, Difficulty::Medium)
         });
 
     coordinator.LaunchStarcraft();
