@@ -103,22 +103,46 @@ private:
     }
 
     bool ManageLarva(const ObservationInterface* observation) {
-        const Unit* larva;
-        int optimal_drone = std::min((int)CountUnitType(UNIT_TYPEID::ZERG_HATCHERY) * 16, 48);
-        if (GetRandomUnit(larva, observation, UNIT_TYPEID::ZERG_LARVA)) {
-            if (observation->GetFoodUsed() > observation->GetFoodCap() - 6) {
-                TrainUnit(ABILITY_ID::TRAIN_OVERLORD, larva, observation);
+        size_t drone_count = 16;
+        size_t overlord_count = 1;
+        size_t ling_count = 0;
+        if (observation->GetFoodUsed() > observation->GetFoodCap() - 4) {
+            overlord_count = (observation->GetFoodCap() / 6) + 1;
+        }
+        if (CountUnitType(UNIT_TYPEID::ZERG_SPAWNINGPOOL) >= 1) {
+            ling_count = 200;
+        }
+        if (CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) > 20) {
+            drone_count = 32;
+        }
+        TryTrainUnits(UNIT_TYPEID::ZERG_DRONE, ABILITY_ID::TRAIN_DRONE, drone_count, observation);
+        TryTrainUnits(UNIT_TYPEID::ZERG_OVERLORD, ABILITY_ID::TRAIN_OVERLORD, overlord_count, observation);
+        TryTrainUnits(UNIT_TYPEID::ZERG_ZERGLING, ABILITY_ID::TRAIN_ZERGLING, ling_count, observation);
+
+        return true;
+    }
+
+    bool TryTrainUnits(UNIT_TYPEID unit_type, ABILITY_ID ability_type, size_t number_of_units, const ObservationInterface* observation) {
+        size_t number_existing_units = CountUnitType(unit_type);
+        Units eggs = observation->GetUnits(Unit::Alliance::Self, IsUnit(UNIT_TYPEID::ZERG_EGG));
+        for (const auto& egg : eggs) {
+            if (!egg->orders.empty()) {
+                if (egg->orders.front().ability_id == ability_type) {
+                    number_existing_units++;
+                }
             }
-            else if (CountUnitType(UNIT_TYPEID::ZERG_DRONE) < 32) {
-                Actions()->UnitCommand(larva, ABILITY_ID::TRAIN_DRONE);
-            }
-            else if (CountUnitType(UNIT_TYPEID::ZERG_SPAWNINGPOOL) >= 1) {
-                Actions()->UnitCommand(larva, ABILITY_ID::TRAIN_ZERGLING);
-            }
-            return true;
         }
 
-        return false;
+        // if more units are needed spawn them
+        if (number_existing_units < number_of_units) {
+            const Unit* larva;
+            if (GetRandomUnit(larva, observation, UNIT_TYPEID::ZERG_LARVA)) {
+                Actions()->UnitCommand(larva, ability_type);
+                return true;
+            }
+            return false;
+        }
+        return true;
     }
 
     bool ManageStructures(const ObservationInterface* observation) {
