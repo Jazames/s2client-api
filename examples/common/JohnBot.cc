@@ -38,6 +38,7 @@ public:
     }
 
     virtual void OnUnitIdle(const Unit* unit) final {
+        const ObservationInterface* observation = Observation();
         switch (unit->unit_type.ToType()) {
         case UNIT_TYPEID::ZERG_DRONE: {
             const Unit* mineral_target = FindNearestMineralPatch(unit->pos);
@@ -53,7 +54,10 @@ public:
             }
             break;
         }
-        case UNIT_TYPEID::ZERG_ZERGLING: {
+        case UNIT_TYPEID::ZERG_SPAWNINGPOOL: {
+           
+                Actions()->UnitCommand(unit, ABILITY_ID::RESEARCH_ZERGLINGMETABOLICBOOST);
+           
             break;
         }
         default: {
@@ -83,29 +87,59 @@ private:
 
     bool ManageArmy(const ObservationInterface* observation) {
         uint32_t game_loop = Observation()->GetGameLoop();
-            Units army = observation->GetUnits(Unit::Alliance::Self, IsUnit(UNIT_TYPEID::ZERG_ZERGLING));
+            Units army = observation->GetUnits(Unit::Alliance::Self);
             int armycount = 0;
             for (const auto& soldier : army) {
                 const float GROUP_DISTANCE = 10.0f;
+                switch (soldier->unit_type.ToType())
+                {
+                case UNIT_TYPEID::ZERG_BANELING: {
                     // group up if not in one group
-                    if (CountNeibors(soldier, UNIT_TYPEID::ZERG_ZERGLING, GROUP_DISTANCE, observation) >= 15 && CountUnitType(UNIT_TYPEID::ZERG_ZERGLING)) {
+                    if (CountNeibors(soldier, UNIT_TYPEID::ZERG_ZERGLING, GROUP_DISTANCE + 5.0f, observation) >= 10 ) {
                         AttackWithUnit(soldier, observation);
                     }
                     else {
-                        Units farSoldier;
-                        for (const auto& other : army) {
-                            if (Distance2D(other->pos, soldier->pos) > GROUP_DISTANCE) {
-                                farSoldier.push_back(other);
-                            }
+                        GroupUp(soldier, army, GROUP_DISTANCE,UNIT_TYPEID::ZERG_BANELING);
+                    }
+                    break;
+                }
+
+                case UNIT_TYPEID::ZERG_ZERGLING: {
+                    const Unit* nearest_enemy = GetNearestEnemy(soldier->pos);
+                    if (nearest_enemy != nullptr) {
+                        if (Distance2D(nearest_enemy->pos, soldier->pos) < 15.0f) {
+                            AttackWithUnit(soldier, observation);
                         }
-                        const Unit* rally = GetNearestUnit(soldier->pos, farSoldier);
-                        if (rally != nullptr) {
-                            Actions()->UnitCommand(soldier, ABILITY_ID::ATTACK_ATTACK, rally->pos);
+                        else {
+                            GroupUp(soldier, army, GROUP_DISTANCE, UNIT_TYPEID::ZERG_BANELING);
                         }
                     }
-        }
+                    else {
+                        GroupUp(soldier, army, GROUP_DISTANCE, UNIT_TYPEID::ZERG_BANELING);
+                    }
+                    break;
+                }
+                default:
+                    break;
+                }
+            }
 
         return true;
+    }
+
+    bool GroupUp(const Unit* soldier, const Units army, float group_distance,UNIT_TYPEID unit_type_to_group) {
+        Units farSoldier;
+        for (const auto& other : army) {
+            if (other->unit_type == unit_type_to_group && Distance2D(other->pos, soldier->pos) > group_distance) {
+                farSoldier.push_back(other);
+            }
+        }
+        const Unit* rally = GetNearestUnit(soldier->pos, farSoldier);
+        if (rally != nullptr) {
+            Actions()->UnitCommand(soldier, ABILITY_ID::ATTACK_ATTACK, rally->pos);
+            return true;
+        }
+        return false;
     }
 
     size_t CountNeibors(const Unit* unit, UNIT_TYPEID unit_type, float distance, const ObservationInterface* observation) {
@@ -120,15 +154,15 @@ private:
         return neibors;
     }
 
-    bool AttackWithUnit(const Unit* unit, const ObservationInterface* observation) {
+    bool AttackWithUnit(const Unit* unit, const ObservationInterface* observation, ABILITY_ID ability_id = ABILITY_ID::ATTACK_ATTACK) {
         Units enemy_unit = observation->GetUnits(Unit::Alliance::Enemy);
         if (enemy_unit.empty()) {
             GameInfo game_info = observation->GetGameInfo();
-            Actions()->UnitCommand(unit, ABILITY_ID::ATTACK_ATTACK, game_info.enemy_start_locations.front());
+            Actions()->UnitCommand(unit, ability_id, game_info.enemy_start_locations.front());
         }
         else {
             const Unit* target = GetNearestEnemy(unit->pos);
-            Actions()->UnitCommand(unit, ABILITY_ID::ATTACK_ATTACK, target->pos);
+            Actions()->UnitCommand(unit, ability_id, target->pos);
         }
         return true;
     }
@@ -165,8 +199,6 @@ private:
         }
     }
 
-        // use queens to make larva
-
     bool ManageQueens(const ObservationInterface* observation) {
         Units queens = observation->GetUnits(Unit::Alliance::Self, IsUnit(UNIT_TYPEID::ZERG_QUEEN));
         for (const auto& queen : queens) {
@@ -183,29 +215,38 @@ private:
     }
 
     bool ManageLarva(const ObservationInterface* observation) {
-        size_t drone_count = 16;
+        size_t drone_count = 20;
         size_t overlord_count = 1;
         size_t ling_count = 0;
+        size_t bang_count = 0;
+        size_t roach_count = 0;
         if (observation->GetFoodUsed() > observation->GetFoodCap() - 4) {
             overlord_count = (observation->GetFoodCap() / 6) + 1;
         }
         if (CountUnitType(UNIT_TYPEID::ZERG_SPAWNINGPOOL) >= 1) {
-            ling_count = 200;
+            ling_count = 50;
         }
-        if (CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) > 20) {
-            drone_count = CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) / 2;
+        if (CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) > 10) {
+            drone_count = CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) / 2 + 20;
+            if (CountUnitType(UNIT_TYPEID::ZERG_BANELINGNEST) >= 1) {
+                bang_count = 15;
+            }
+        }
+        if (CountUnitType(UNIT_TYPEID::ZERG_ROACHWARREN) >= 1) {
+            roach_count = 10;
         }
         
         TryTrainUnits(UNIT_TYPEID::ZERG_DRONE, ABILITY_ID::TRAIN_DRONE, drone_count, observation);
         TryTrainUnits(UNIT_TYPEID::ZERG_OVERLORD, ABILITY_ID::TRAIN_OVERLORD, overlord_count, observation);
         TryTrainUnits(UNIT_TYPEID::ZERG_ZERGLING, ABILITY_ID::TRAIN_ZERGLING, ling_count, observation);
+        TryTrainUnits(UNIT_TYPEID::ZERG_BANELING, ABILITY_ID::TRAIN_BANELING, bang_count, observation,UNIT_TYPEID::ZERG_BANELINGCOCOON,UNIT_TYPEID::ZERG_ZERGLING);
 
         return true;
     }
 
-    bool TryTrainUnits(UNIT_TYPEID unit_type, ABILITY_ID ability_type, size_t number_of_units, const ObservationInterface* observation) {
+    bool TryTrainUnits(UNIT_TYPEID unit_type, ABILITY_ID ability_type, size_t number_of_units, const ObservationInterface* observation, UNIT_TYPEID morph_type = UNIT_TYPEID::ZERG_EGG, UNIT_TYPEID unit_to_morph = UNIT_TYPEID::ZERG_LARVA) {
         size_t number_existing_units = CountUnitType(unit_type);
-        Units eggs = observation->GetUnits(Unit::Alliance::Self, IsUnit(UNIT_TYPEID::ZERG_EGG));
+        Units eggs = observation->GetUnits(Unit::Alliance::Self, IsUnit(morph_type));
         for (const auto& egg : eggs) {
             if (!egg->orders.empty()) {
                 if (egg->orders.front().ability_id == ability_type) {
@@ -217,7 +258,7 @@ private:
         // if more units are needed spawn them
         if (number_existing_units < number_of_units) {
             const Unit* larva;
-            if (GetRandomUnit(larva, observation, UNIT_TYPEID::ZERG_LARVA)) {
+            if (GetRandomUnit(larva, observation, unit_to_morph)) {
                 Actions()->UnitCommand(larva, ability_type);
                 return true;
             }
@@ -227,13 +268,45 @@ private:
     }
 
     bool ManageStructures(const ObservationInterface* observation) {
-        if (CountUnitType(UNIT_TYPEID::ZERG_DRONE) >= 16 && CountUnitType(UNIT_TYPEID::ZERG_SPAWNINGPOOL) < 1) {
-            TryBuildStructure(ABILITY_ID::BUILD_SPAWNINGPOOL);
+        if (CountUnitType(UNIT_TYPEID::ZERG_DRONE) >= 16) {
+            if (CountUnitType(UNIT_TYPEID::ZERG_SPAWNINGPOOL) < 1) {
+                TryBuildStructure(ABILITY_ID::BUILD_SPAWNINGPOOL);
+            }
+            else if (CountUnitType(UNIT_TYPEID::ZERG_EXTRACTOR) < 2) {
+                Point2D base = observation->GetUnits(Unit::Alliance::Self, IsUnit(UNIT_TYPEID::ZERG_HATCHERY)).front()->pos;
+                TryBuildGas(base);
+            }
+            else if (CountUnitType(UNIT_TYPEID::ZERG_BANELINGNEST) < 1) {
+                TryBuildStructure(ABILITY_ID::BUILD_BANELINGNEST);
+            }
         }
         if (CountUnitType(UNIT_TYPEID::ZERG_LARVA) <= 1 && observation->GetMinerals() >= 300 && CountUnitType(UNIT_TYPEID::ZERG_HATCHERY) < 8) {
             TryBuildExpantion();
         }
         return true;
+    }
+
+    bool TryBuildGas(Point2D base_location) {
+        const ObservationInterface* observation = Observation();
+        Units geysers = observation->GetUnits(Unit::Alliance::Neutral, IsVespeneGeyser());
+
+        float minimum_distance = 15.0f;
+        Tag closestGeyser = 0;
+        for (const auto& geyser : geysers) {
+            float curr_distance = Distance2D(base_location, geyser->pos);
+            if (curr_distance < minimum_distance) {
+                if (Query()->Placement(ABILITY_ID::BUILD_EXTRACTOR, geyser->pos)) {
+                    minimum_distance = curr_distance;
+                    closestGeyser = geyser->tag;
+                }
+            }
+        }
+
+        if (closestGeyser == 0) {
+            return false;
+        }
+
+        TryBuildStructure(ABILITY_ID::BUILD_EXTRACTOR, UNIT_TYPEID::ZERG_DRONE, closestGeyser);
     }
 
     bool TrainUnit(AbilityID ability_type_for_unit, const Unit* unitToTrain, const ObservationInterface* observation) {
@@ -248,6 +321,32 @@ private:
         }
         Actions()->UnitCommand(unitToTrain, ability_type_for_unit);
         return true;
+    }
+
+    bool TryBuildStructure(ABILITY_ID ability_Type_for_structure, UNIT_TYPEID unit_type, Tag location_tag) {
+        const ObservationInterface* observation = Observation();
+        Units workers = observation->GetUnits(Unit::Alliance::Self, IsUnit(unit_type));
+        const Unit* target = observation->GetUnit(location_tag);
+
+        if (workers.empty()) {
+            return false;
+        }
+
+        for (const auto& worker : workers) {
+            for (const auto& order : worker->orders) {
+                if (order.ability_id == ability_Type_for_structure) {
+                    return false;
+                }
+            }
+        }
+
+        const Unit* unit = GetRandomEntry(workers);
+
+        if (Query()->Placement(ability_Type_for_structure, target->pos)) {
+            Actions()->UnitCommand(unit, ability_Type_for_structure, target);
+            return true;
+        }
+        return false;
     }
 
     bool TryBuildStructure(ABILITY_ID ability_Type_for_structure, UNIT_TYPEID unit_type = UNIT_TYPEID::ZERG_DRONE) {
@@ -302,6 +401,7 @@ private:
 
     bool ManageMining(const ObservationInterface* observation) {
         Units townHalls = observation->GetUnits(Unit::Alliance::Self, IsUnit(UNIT_TYPEID::ZERG_HATCHERY));
+        Units gases = observation->GetUnits(Unit::Alliance::Self, IsUnit(UNIT_TYPEID::ZERG_EXTRACTOR));
 
         for (const auto& hive : townHalls) {
             // if has the ideal number of harvesters do nothing
@@ -318,6 +418,19 @@ private:
                     if (GetRandomUnit(other_hive, observation, UNIT_TYPEID::ZERG_HATCHERY)) {
                         Actions()->UnitCommand(drone, ABILITY_ID::SMART, other_hive->pos);
                     }
+                }
+            }
+        }
+
+        for (const auto& gas : gases) {
+            if (gas->ideal_harvesters == 0) {
+                continue;
+            }
+
+            if (gas->assigned_harvesters <= gas->ideal_harvesters) {
+                const Unit* drone = nullptr;
+                if (NearestDrone(drone, gas, observation)) {
+                    Actions()->UnitCommand(drone,ABILITY_ID::SMART,gas);
                 }
             }
         }
