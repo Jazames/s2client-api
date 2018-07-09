@@ -1,3 +1,4 @@
+//{C++}
 #include <sc2api/sc2_api.h>
 #include <sc2lib/sc2_lib.h>
 
@@ -18,20 +19,22 @@ struct IsVespeneGeyser {
 class JohnBot : public Agent {
 public:
     virtual void OnGameStart() final {
-        std::cout << "ZingRush1" << std::endl;
+        std::cout << "ZingRush4" << std::endl;
     }
 
     virtual void OnStep() {
         const ObservationInterface* observation = Observation();
         uint32_t game_loop = Observation()->GetGameLoop();
+        TrainQueens(observation);
         ManageLarva(observation);
         ManageStructures(observation);
+        ManageQueens(observation);
         ManageArmy(observation);
         if (game_loop % 30 == 0) {
             ManageMining(observation);
         }
-        
-        // std::cout << Observation()->GetGameLoop() << std::endl;
+
+// std::cout << Observation()->GetGameLoop() << std::endl;
     }
 
     virtual void OnUnitIdle(const Unit* unit) final {
@@ -46,7 +49,7 @@ public:
         }
         case UNIT_TYPEID::ZERG_HATCHERY: {
             if (CountUnitType(UNIT_TYPEID::ZERG_SPAWNINGPOOL) >= 1) {
-               // Actions()->UnitCommand(unit, ABILITY_ID::TRAIN_QUEEN);
+                // Actions()->UnitCommand(unit, ABILITY_ID::TRAIN_QUEEN);
             }
             break;
         }
@@ -80,21 +83,26 @@ private:
 
     bool ManageArmy(const ObservationInterface* observation) {
         uint32_t game_loop = Observation()->GetGameLoop();
-        if (CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) > 20) {
             Units army = observation->GetUnits(Unit::Alliance::Self, IsUnit(UNIT_TYPEID::ZERG_ZERGLING));
-            static Point2D rally = army.front()->pos;
             int armycount = 0;
-            for (const auto soldier : army) {
-                if (game_loop % 5 == 0) {
+            for (const auto& soldier : army) {
+                const float GROUP_DISTANCE = 10.0f;
                     // group up if not in one group
-                    if (CountNeibors(soldier, UNIT_TYPEID::ZERG_ZERGLING, 10.0f, observation) >= 15) {
+                    if (CountNeibors(soldier, UNIT_TYPEID::ZERG_ZERGLING, GROUP_DISTANCE, observation) >= 15 && CountUnitType(UNIT_TYPEID::ZERG_ZERGLING)) {
                         AttackWithUnit(soldier, observation);
                     }
                     else {
-                        Actions()->UnitCommand(soldier, ABILITY_ID::ATTACK_ATTACK, rally);
+                        Units farSoldier;
+                        for (const auto& other : army) {
+                            if (Distance2D(other->pos, soldier->pos) > GROUP_DISTANCE) {
+                                farSoldier.push_back(other);
+                            }
+                        }
+                        const Unit* rally = GetNearestUnit(soldier->pos, farSoldier);
+                        if (rally != nullptr) {
+                            Actions()->UnitCommand(soldier, ABILITY_ID::ATTACK_ATTACK, rally->pos);
+                        }
                     }
-                }
-            }  
         }
 
         return true;
@@ -119,8 +127,58 @@ private:
             Actions()->UnitCommand(unit, ABILITY_ID::ATTACK_ATTACK, game_info.enemy_start_locations.front());
         }
         else {
-            Actions()->UnitCommand(unit, ABILITY_ID::ATTACK_ATTACK, enemy_unit.front()->pos);
+            const Unit* target = GetNearestEnemy(unit->pos);
+            Actions()->UnitCommand(unit, ABILITY_ID::ATTACK_ATTACK, target->pos);
         }
+        return true;
+    }
+
+    bool TrainQueens(const ObservationInterface* observation) {
+        //train queens if not enough are out.
+
+        size_t queen_count = CountUnitType(UNIT_TYPEID::ZERG_HATCHERY);
+        Units queens = observation->GetUnits(Unit::Alliance::Self, IsUnit(UNIT_TYPEID::ZERG_QUEEN));
+
+        // find a hatchery that has no queens nearby
+        if (CountUnitType(UNIT_TYPEID::ZERG_SPAWNINGPOOL) >= 1 && CountUnitType(UNIT_TYPEID::ZERG_QUEEN) < queen_count) {
+            Units hatcheris = observation->GetUnits(Unit::Alliance::Self, IsUnit(UNIT_TYPEID::ZERG_HATCHERY));
+            // const Unit* choice_hatch = hatcheris.front();
+            for (const auto& hatch : hatcheris) {
+                bool has_queen = false;
+                for (const auto& queen : queens) {
+                    if (Distance2D(queen->pos, hatch->pos) < 10.0f) {
+                        has_queen = true;
+                        break;
+                    }
+                }
+                if (!has_queen) {
+                    for (const auto& order : hatch->orders) {
+                        if (order.ability_id == ABILITY_ID::TRAIN_QUEEN) {
+                            return false;
+                        }
+                    }
+                    Actions()->UnitCommand(hatch, ABILITY_ID::TRAIN_QUEEN);
+                }
+                return true;
+
+            }
+        }
+    }
+
+        // use queens to make larva
+
+    bool ManageQueens(const ObservationInterface* observation) {
+        Units queens = observation->GetUnits(Unit::Alliance::Self, IsUnit(UNIT_TYPEID::ZERG_QUEEN));
+        for (const auto& queen : queens) {
+            if (queen->energy > 25) {
+                const Unit* hatch = GetNearestUnit(queen->pos, UNIT_TYPEID::ZERG_HATCHERY);
+                if (GetRandomUnit(hatch, observation, UNIT_TYPEID::ZERG_HATCHERY)) {
+                    Actions()->UnitCommand(queen, ABILITY_ID::EFFECT_INJECTLARVA, hatch);
+                    return true;
+                }
+            }
+        }
+
         return true;
     }
 
@@ -284,12 +342,14 @@ private:
         }
 
         auto start_location = observation->GetStartLocation();
+
         Actions()->UnitCommand(unit_to_build, ABILITY_ID::BUILD_HATCHERY, NearestExpantion(start_location, observation));
+        return true;
     }
 
-    Point3D NearestExpantion(Point2D start, const ObservationInterface* observation) {
+    Point2D NearestExpantion(Point2D start, const ObservationInterface* observation) {
         float min_distance = std::numeric_limits<float>::max();
-        Point3D closest_expantion;
+        Point3D closest_expantion(0,0,0);
         auto expansions = search::CalculateExpansionLocations(observation, Query());
         for (const auto& expansion : expansions) {
             float curr_distance = Distance2D(start, expansion);
@@ -302,7 +362,15 @@ private:
             }
         }
 
-        return closest_expantion;
+        if (closest_expantion == Point3D(0, 0, 0)) {
+            const Unit* overlord = nullptr;
+            if (GetRandomUnit(overlord, observation, UNIT_TYPEID::ZERG_OVERLORD)) {
+                float rx = GetRandomScalar();
+                float ry = GetRandomScalar();
+                return Point2D(overlord->pos.x + rx * 15.0f, overlord->pos.y + ry * 15.0f);
+            }
+        }
+        return Point2D(closest_expantion.x,closest_expantion.y);
     }
 
     const Unit* FindNearestMineralPatch(const Point2D& start) {
@@ -321,7 +389,28 @@ private:
         return target;
     }
 
-   
+    const Unit* GetNearestEnemy(const Point2D& start) {
+        Units units = Observation()->GetUnits(Unit::Alliance::Enemy);
+        return GetNearestUnit(start, units);
+    }
+
+    const Unit* GetNearestUnit(const Point2D& start, UNIT_TYPEID unit_type, Unit::Alliance unit_ally = Unit::Alliance::Self) {
+        Units units = Observation()->GetUnits(unit_ally, IsUnit(unit_type));
+        return GetNearestUnit(start, units);
+    }
+
+    const Unit* GetNearestUnit(const Point2D& start, Units unit_list) {
+        float distance = std::numeric_limits<float>::max();
+        const Unit* target = nullptr;
+        for (const auto& unit : unit_list) {
+            float unit_distance = DistanceSquared2D(unit->pos, start);
+            if (unit_distance < distance) {
+                distance = unit_distance;
+                target = unit;
+            }
+        }
+        return target;
+    }
 };
 
 
