@@ -240,7 +240,7 @@ private:
         }
         else {
             const Unit* target = GetNearestEnemy(unit->pos);
-            if (target->unit_type == UNIT_TYPEID::ZERG_CHANGELINGZERGLING || target->unit_type == UNIT_TYPEID::ZERG_CHANGELINGZERGLING) {
+            if (target->unit_type == UNIT_TYPEID::ZERG_CHANGELINGZERGLING || target->unit_type == UNIT_TYPEID::ZERG_CHANGELINGZERGLING || target->unit_type == UNIT_TYPEID::ZERG_CHANGELING) {
                 Actions()->UnitCommand(unit, ability_id, target);
             }
             else {
