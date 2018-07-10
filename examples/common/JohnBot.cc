@@ -162,7 +162,7 @@ private:
 
                 case UNIT_TYPEID::ZERG_OVERLORD: {
                     const Unit* enemy = GetNearestEnemy(soldier->pos);
-                    if (enemy == nullptr || Distance2D(soldier->pos,enemy->pos) < 20.0f) {
+                    if (enemy == nullptr || Distance2D(soldier->pos,enemy->pos) > 20.0f) {
                         if (game_loop % 100 == 0) {
                             Point2D target = FindRandomLocation(observation->GetGameInfo());
                             Actions()->UnitCommand(soldier, ABILITY_ID::SMART, target);
@@ -244,7 +244,7 @@ private:
 
             Units units = observation->GetUnits(Unit::Alliance::Self);
             const Unit* nearest_scout = GetNearestUnit(target_point, units);
-            if (Distance2D(nearest_scout->pos, target_point) <= 15.0f) {
+            if (Distance2D(nearest_scout->pos, target_point) <= 5.0f) {
                 target_point = GetRandomEntry(minerals)->pos;
             }
             Actions()->UnitCommand(unit, ability_id, target_point);
@@ -377,7 +377,7 @@ private:
     bool ManageStructures(const ObservationInterface* observation) {
         size_t gases = 2;
         if (CountUnitType(UNIT_TYPEID::ZERG_DRONE) >= 34) {
-            gases = (CountUnitType(UNIT_TYPEID::ZERG_HATCHERY) + CountUnitType(UNIT_TYPEID::ZERG_LAIR)) * 2;
+            gases = 4;
         }
         if (CountUnitType(UNIT_TYPEID::ZERG_DRONE) >= 16) {
             if (CountUnitType(UNIT_TYPEID::ZERG_SPAWNINGPOOL) < 1) {
