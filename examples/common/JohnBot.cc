@@ -181,7 +181,7 @@ private:
                 case UNIT_TYPEID::ZERG_DRONE: {
                     if (CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) < 1) {
                         const Unit* near_enemy = GetNearestEnemy(soldier->pos);
-                        if (Distance2D(near_enemy->pos, soldier->pos) <= 20.0f) {
+                        if (near_enemy != nullptr && Distance2D(near_enemy->pos, soldier->pos) <= 20.0f) {
                             defend(soldier, observation);
                         }
                     }
