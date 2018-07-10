@@ -127,8 +127,8 @@ private:
                 case UNIT_TYPEID::ZERG_BANELING: {
                     defend(soldier, observation);
                     // group up if not in one group
-                    if (CountNeibors(soldier, UNIT_TYPEID::ZERG_BANELING, GROUP_DISTANCE + 5.0f, observation) >= 8 ) {
-                        if (CountUnitType(UNIT_TYPEID::ZERG_HYDRALISKDEN) < 1 || CountUnitType(UNIT_TYPEID::ZERG_HYDRALISK) >= 8) {
+                    if (CountNeibors(soldier, UNIT_TYPEID::ZERG_BANELING, GROUP_DISTANCE - 5.0f, observation) >= 8 ) {
+                        if (CountUnitType(UNIT_TYPEID::ZERG_HYDRALISKDEN) < 1 || CountUnitType(UNIT_TYPEID::ZERG_HYDRALISK) >= 8 || CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) >= 20) {
                             AttackWithUnit(soldier, observation);
                         }
                     }
@@ -140,7 +140,7 @@ private:
                 case UNIT_TYPEID::ZERG_ZERGLING: {
                     defend(soldier, observation);
                     if (CountUnitType(UNIT_TYPEID::ZERG_HYDRALISKDEN) < 1 || CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) >= 20) {
-                        if (CountNeibors(soldier, UNIT_TYPEID::ZERG_ZERGLING, GROUP_DISTANCE + 5.0f, observation) >= 20) {
+                        if (CountNeibors(soldier, UNIT_TYPEID::ZERG_ZERGLING, GROUP_DISTANCE - 5.0f, observation) >= 20) {
                             AttackWithUnit(soldier, observation);
                         
                         }
@@ -148,8 +148,8 @@ private:
                             GroupUp(soldier, army, GROUP_DISTANCE, UNIT_TYPEID::ZERG_ZERGLING);
                         }
                     }
-                    else if (CountUnitType(UNIT_TYPEID::ZERG_HYDRALISK) >= 8) {
-                        if (CountNeibors(soldier, UNIT_TYPEID::ZERG_ZERGLING, GROUP_DISTANCE + 5.0f, observation) >= 8) {
+                    else if (CountUnitType(UNIT_TYPEID::ZERG_HYDRALISK) >= 5) {
+                        if (CountNeibors(soldier, UNIT_TYPEID::ZERG_HYDRALISK, GROUP_DISTANCE - 5.0f, observation) >= 8) {
 
                         }
 
@@ -180,7 +180,10 @@ private:
                 }
                 case UNIT_TYPEID::ZERG_DRONE: {
                     if (CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) < 1) {
-                        defend(soldier, observation);
+                        const Unit* near_enemy = GetNearestEnemy(soldier->pos);
+                        if (Distance2D(near_enemy->pos, soldier->pos) <= 20.0f) {
+                            defend(soldier, observation);
+                        }
                     }
                     break;
                 }
@@ -236,7 +239,15 @@ private:
         Units enemy_unit = observation->GetUnits(Unit::Alliance::Enemy);
         if (enemy_unit.empty()) {
             GameInfo game_info = observation->GetGameInfo();
-            Actions()->UnitCommand(unit, ability_id, game_info.enemy_start_locations.front());
+            Units minerals = observation->GetUnits(Unit::Alliance::Neutral);
+            static Point2D target_point = game_info.enemy_start_locations.front();
+
+            Units units = observation->GetUnits(Unit::Alliance::Self);
+            const Unit* nearest_scout = GetNearestUnit(target_point, units);
+            if (Distance2D(nearest_scout->pos, target_point) <= 15.0f) {
+                target_point = GetRandomEntry(minerals)->pos;
+            }
+            Actions()->UnitCommand(unit, ability_id, target_point);
         }
         else {
             const Unit* target = GetNearestEnemy(unit->pos);
@@ -306,7 +317,7 @@ private:
         size_t hydra_count = 0;
 
         size_t number_of_bases = CountUnitType(UNIT_TYPEID::ZERG_HATCHERY) + CountUnitType(UNIT_TYPEID::ZERG_LAIR);
-        if (CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) >= 30) {
+        if (CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) >= 20 || CountUnitType(UNIT_TYPEID::ZERG_HYDRALISK) >= 4) {
             drone_count = number_of_bases * 21;
         }
         drone_count = CountUnitType(UNIT_TYPEID::ZERG_HATCHERY) * 20;
@@ -317,9 +328,9 @@ private:
         if (CountUnitType(UNIT_TYPEID::ZERG_SPAWNINGPOOL) >= 1) {
             ling_count = 20;
         }
-        if (CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) > 10) {
+        if (CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) > 15) {
             if (CountUnitType(UNIT_TYPEID::ZERG_BANELINGNEST) >= 1) {
-                bang_count = 10;
+                bang_count = 8;
             }
         }
         if (CountUnitType(UNIT_TYPEID::ZERG_ROACHWARREN) >= 1) {
@@ -364,11 +375,15 @@ private:
     }
 
     bool ManageStructures(const ObservationInterface* observation) {
+        size_t gases = 2;
+        if (CountUnitType(UNIT_TYPEID::ZERG_DRONE) >= 34) {
+            gases = (CountUnitType(UNIT_TYPEID::ZERG_HATCHERY) + CountUnitType(UNIT_TYPEID::ZERG_LAIR)) * 2;
+        }
         if (CountUnitType(UNIT_TYPEID::ZERG_DRONE) >= 16) {
             if (CountUnitType(UNIT_TYPEID::ZERG_SPAWNINGPOOL) < 1) {
                 TryBuildStructure(ABILITY_ID::BUILD_SPAWNINGPOOL);
             }
-            else if (CountUnitType(UNIT_TYPEID::ZERG_EXTRACTOR) < (CountUnitType(UNIT_TYPEID::ZERG_HATCHERY) + CountUnitType(UNIT_TYPEID::ZERG_LAIR)) * 2) {
+            else if (CountUnitType(UNIT_TYPEID::ZERG_EXTRACTOR) < gases) {
                 Units bases = observation->GetUnits(Unit::Alliance::Self, IsTownHall());
                 for (const auto& base : bases) {
                     TryBuildGas(base->pos);
@@ -532,7 +547,7 @@ private:
                 continue;
             }
 
-            if (gas->assigned_harvesters <= gas->ideal_harvesters) {
+            if (gas->assigned_harvesters < gas->ideal_harvesters) {
                 const Unit* drone = nullptr;
                 if (NearestDrone(drone, gas, observation)) {
                     Actions()->UnitCommand(drone,ABILITY_ID::SMART,gas);
