@@ -27,6 +27,18 @@ struct IsTownHall {
     }
 };
 
+struct IsArmy {
+    bool operator()(const Unit& unit) {
+        switch (unit.unit_type.ToType()) {
+        case UNIT_TYPEID::ZERG_ZERGLING: return true;
+        case UNIT_TYPEID::ZERG_BANELING: return true;
+        case UNIT_TYPEID::ZERG_HYDRALISK: return true;
+        case UNIT_TYPEID::ZERG_ROACH: return true;
+        default: return false;
+        }
+    }
+};
+
 class JohnBot : public Agent {
 public:
     virtual void OnGameStart() final {
@@ -87,6 +99,17 @@ public:
         }
     }
 
+    void OnUnitEnterVision(const Unit* enemy) {
+        Units bases = Observation()->GetUnits(Unit::Alliance::Self, IsTownHall());
+        for (const auto& base : bases) {
+            if (Distance2D(enemy->pos, base->pos) <= 30) {
+                Units army = Observation()->GetUnits(Unit::Alliance::Self, IsArmy());
+                for (const auto& soldier : army) {
+                    Actions()->UnitCommand(soldier, ABILITY_ID::ATTACK_ATTACK, enemy->pos);
+                }
+            }
+        }
+    }
 
 private:
     size_t CountUnitType(UNIT_TYPEID unit_type) {
@@ -108,15 +131,27 @@ private:
 
     bool ManageArmy(const ObservationInterface* observation) {
         uint32_t game_loop = Observation()->GetGameLoop();
-            Units army = observation->GetUnits(Unit::Alliance::Self);
+            Units army = observation->GetUnits(Unit::Alliance::Self,IsArmy());
             int armycount = 0;
+
             for (const auto& soldier : army) {
                 const float GROUP_DISTANCE = 10.0f;
+                size_t neibors = CountNeibors(soldier, army, GROUP_DISTANCE, observation);
+
+                if (neibors >= 20) {
+                    AttackWithUnit(soldier, observation);
+                }
+                else {
+                    GroupUp(soldier, army, GROUP_DISTANCE);
+                }
+
+                /*
                 switch (soldier->unit_type.ToType())
                 {
                 case UNIT_TYPEID::ZERG_HYDRALISK: {
-                    defend(soldier, observation);
-                    if (CountNeibors(soldier, UNIT_TYPEID::ZERG_HYDRALISK, GROUP_DISTANCE + 5.0f, observation) >= 8) {
+                    //defend(soldier, observation);
+
+                    if (neibors >= 8) {
                         AttackWithUnit(soldier, observation);
                     }
                     else {
@@ -125,10 +160,12 @@ private:
                     break;
                 }
                 case UNIT_TYPEID::ZERG_BANELING: {
-                    defend(soldier, observation);
+                    //defend(soldier, observation);
                     // group up if not in one group
-                    if (CountNeibors(soldier, UNIT_TYPEID::ZERG_BANELING, GROUP_DISTANCE - 5.0f, observation) >= 8 ) {
-                        if (CountUnitType(UNIT_TYPEID::ZERG_HYDRALISKDEN) < 1 || CountUnitType(UNIT_TYPEID::ZERG_HYDRALISK) >= 8 || CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) >= 20) {
+
+                    size_t neibors = CountNeibors(soldier, UNIT_TYPEID::ZERG_BANELING, GROUP_DISTANCE, observation);
+                    if (neibors >= 8 ) {
+                        if (CountUnitType(UNIT_TYPEID::ZERG_BANELING) >= 8) {
                             AttackWithUnit(soldier, observation);
                         }
                     }
@@ -138,9 +175,11 @@ private:
                     break;
                 }
                 case UNIT_TYPEID::ZERG_ZERGLING: {
-                    defend(soldier, observation);
-                    if (CountUnitType(UNIT_TYPEID::ZERG_HYDRALISKDEN) < 1 || CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) >= 20) {
-                        if (CountNeibors(soldier, UNIT_TYPEID::ZERG_ZERGLING, GROUP_DISTANCE - 5.0f, observation) >= 20) {
+                    //defend(soldier, observation);
+
+                    if (CountUnitType(UNIT_TYPEID::ZERG_HYDRALISKDEN) < 1) {
+                        size_t neibors = CountNeibors(soldier, UNIT_TYPEID::ZERG_ZERGLING, GROUP_DISTANCE, observation);
+                        if (neibors >= 20) {
                             AttackWithUnit(soldier, observation);
                         
                         }
@@ -149,8 +188,9 @@ private:
                         }
                     }
                     else if (CountUnitType(UNIT_TYPEID::ZERG_HYDRALISK) >= 5) {
-                        if (CountNeibors(soldier, UNIT_TYPEID::ZERG_HYDRALISK, GROUP_DISTANCE - 5.0f, observation) >= 8) {
-
+                        size_t neibors = CountNeibors(soldier, UNIT_TYPEID::ZERG_HYDRALISK, GROUP_DISTANCE, observation);
+                        if (neibors >= 8) {
+                            AttackWithUnit(soldier, observation);
                         }
 
                         else {
@@ -160,7 +200,7 @@ private:
                     break;
                 }
 
-                case UNIT_TYPEID::ZERG_OVERLORD: {
+               /* case UNIT_TYPEID::ZERG_OVERLORD: {
                     const Unit* enemy = GetNearestEnemy(soldier->pos);
                     if (enemy == nullptr || Distance2D(soldier->pos,enemy->pos) > 20.0f) {
                         if (game_loop % 100 == 0) {
@@ -180,25 +220,43 @@ private:
                 }
                 case UNIT_TYPEID::ZERG_DRONE: {
                     if (CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) < 1) {
-                        const Unit* near_enemy = GetNearestEnemy(soldier->pos);
-                        if (near_enemy != nullptr && Distance2D(near_enemy->pos, soldier->pos) <= 20.0f) {
-                            defend(soldier, observation);
-                        }
+                       // const Unit* near_enemy = GetNearestEnemy(soldier->pos);
+                       // if (near_enemy != nullptr && Distance2D(near_enemy->pos, soldier->pos) <= 20.0f) {
+                           // defend(soldier, observation);
+                        //}
                     }
                     break;
                 }
                 default:
                     break;
                 }
+                */
             }
 
         return true;
     }
 
+    // Groups up to spesific unit type in the units group
     bool GroupUp(const Unit* soldier, const Units army, float group_distance,UNIT_TYPEID unit_type_to_group) {
         Units farSoldier;
         for (const auto& other : army) {
             if (other->unit_type == unit_type_to_group && Distance2D(other->pos, soldier->pos) > group_distance) {
+                farSoldier.push_back(other);
+            }
+        }
+        const Unit* rally = GetNearestUnit(soldier->pos, farSoldier);
+        if (rally != nullptr) {
+            Actions()->UnitCommand(soldier, ABILITY_ID::ATTACK_ATTACK, rally->pos);
+            return true;
+        }
+        return false;
+    }
+
+    // Groups up to any other unit in the set of units
+    bool GroupUp(const Unit* soldier, const Units army, float group_distance) {
+        Units farSoldier;
+        for (const auto& other : army) {
+            if (Distance2D(other->pos, soldier->pos) > group_distance) {
                 farSoldier.push_back(other);
             }
         }
@@ -223,11 +281,33 @@ private:
         return false;
     }
 
+    bool defend(const Unit* unit, const Unit*& enemy_unit, const ObservationInterface* observation, size_t distance = 30) {
+        enemy_unit = GetNearestEnemy(unit->pos);
+
+        if (enemy_unit == nullptr) {
+            return false;
+        }
+
+        if (Distance2D(unit->pos, enemy_unit->pos)) {
+
+        }
+
+        return false;
+    }
+
+    // Counts the units of a specific type nearby
     size_t CountNeibors(const Unit* unit, UNIT_TYPEID unit_type, float distance, const ObservationInterface* observation) {
         size_t neibors = 0;
         Units freinds = observation->GetUnits(Unit::Alliance::Self, IsUnit(unit_type));
 
-        for (const auto& freind : freinds) {
+        return CountNeibors(unit,freinds,distance,observation);
+    }
+
+    // Count the units within the units group
+    size_t CountNeibors(const Unit* unit, Units army, float distance, const ObservationInterface* observation) {
+        size_t neibors = 0;
+
+        for (const auto& freind : army) {
             if (Distance2D(freind->pos, unit->pos) <= distance) {
                 neibors++;
             }
@@ -297,15 +377,27 @@ private:
         Units queens = observation->GetUnits(Unit::Alliance::Self, IsUnit(UNIT_TYPEID::ZERG_QUEEN));
         for (const auto& queen : queens) {
             if (queen->energy > 25) {
-                const Unit* hatch = GetNearestUnit(queen->pos, UNIT_TYPEID::ZERG_HATCHERY);
-                if (GetRandomUnit(hatch, observation, UNIT_TYPEID::ZERG_HATCHERY)) {
-                    Actions()->UnitCommand(queen, ABILITY_ID::EFFECT_INJECTLARVA, hatch);
-                    return true;
+                Units bases = observation->GetUnits(Unit::Alliance::Self, IsTownHall());
+                for(const auto& base : bases) {
+                    if (base->build_progress != 1) {
+                        continue;
+                    }
+                    if (queen->energy >= 25 && queen->orders.empty()) {
+                        Actions()->UnitCommand(queen, ABILITY_ID::EFFECT_INJECTLARVA, base);
+                    }
                 }
             }
         }
-
         return true;
+    }
+
+    bool ContainBuff(std::vector<BuffID> buffs, BuffID buff_id) {
+        for (const auto& buff : buffs) {
+            if (buff == buff_id) {
+                return true;
+            }
+        }
+        return false;
     }
 
     bool ManageLarva(const ObservationInterface* observation) {
