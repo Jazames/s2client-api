@@ -34,6 +34,7 @@ struct IsArmy {
         case UNIT_TYPEID::ZERG_BANELING: return true;
         case UNIT_TYPEID::ZERG_HYDRALISK: return true;
         case UNIT_TYPEID::ZERG_ROACH: return true;
+        case UNIT_TYPEID::ZERG_OVERSEER: return true;
         default: return false;
         }
     }
@@ -138,99 +139,30 @@ private:
                 const float GROUP_DISTANCE = 10.0f;
                 size_t neibors = CountNeibors(soldier, army, GROUP_DISTANCE, observation);
 
-                if (neibors >= 20) {
-                    AttackWithUnit(soldier, observation);
-                }
-                else {
-                    GroupUp(soldier, army, GROUP_DISTANCE);
-                }
 
-                /*
                 switch (soldier->unit_type.ToType())
                 {
-                case UNIT_TYPEID::ZERG_HYDRALISK: {
-                    //defend(soldier, observation);
+                case UNIT_TYPEID::ZERG_OVERSEER: {
+                    if (neibors >= 20) {
+                        AttackWithUnit(soldier, observation,ABILITY_ID::MOVE);
+                    }
+                    else {
+                        GroupUp(soldier, army, GROUP_DISTANCE,ABILITY_ID::MOVE);
+                    }
 
-                    if (neibors >= 8) {
+                    break;
+                }
+                default: {
+                    if (neibors >= 20) {
                         AttackWithUnit(soldier, observation);
                     }
                     else {
-                        GroupUp(soldier, army, GROUP_DISTANCE, UNIT_TYPEID::ZERG_HYDRALISK);
+                        GroupUp(soldier, army, GROUP_DISTANCE);
                     }
                     break;
                 }
-                case UNIT_TYPEID::ZERG_BANELING: {
-                    //defend(soldier, observation);
-                    // group up if not in one group
-
-                    size_t neibors = CountNeibors(soldier, UNIT_TYPEID::ZERG_BANELING, GROUP_DISTANCE, observation);
-                    if (neibors >= 8 ) {
-                        if (CountUnitType(UNIT_TYPEID::ZERG_BANELING) >= 8) {
-                            AttackWithUnit(soldier, observation);
-                        }
-                    }
-                    else {
-                        GroupUp(soldier, army, GROUP_DISTANCE,UNIT_TYPEID::ZERG_BANELING);
-                    }
-                    break;
                 }
-                case UNIT_TYPEID::ZERG_ZERGLING: {
-                    //defend(soldier, observation);
-
-                    if (CountUnitType(UNIT_TYPEID::ZERG_HYDRALISKDEN) < 1) {
-                        size_t neibors = CountNeibors(soldier, UNIT_TYPEID::ZERG_ZERGLING, GROUP_DISTANCE, observation);
-                        if (neibors >= 20) {
-                            AttackWithUnit(soldier, observation);
-                        
-                        }
-                        else{
-                            GroupUp(soldier, army, GROUP_DISTANCE, UNIT_TYPEID::ZERG_ZERGLING);
-                        }
-                    }
-                    else if (CountUnitType(UNIT_TYPEID::ZERG_HYDRALISK) >= 5) {
-                        size_t neibors = CountNeibors(soldier, UNIT_TYPEID::ZERG_HYDRALISK, GROUP_DISTANCE, observation);
-                        if (neibors >= 8) {
-                            AttackWithUnit(soldier, observation);
-                        }
-
-                        else {
-                            GroupUp(soldier, army, GROUP_DISTANCE, UNIT_TYPEID::ZERG_ZERGLING);
-                        }
-                    }
-                    break;
-                }
-
-               /* case UNIT_TYPEID::ZERG_OVERLORD: {
-                    const Unit* enemy = GetNearestEnemy(soldier->pos);
-                    if (enemy == nullptr || Distance2D(soldier->pos,enemy->pos) > 20.0f) {
-                        if (game_loop % 100 == 0) {
-                            Point2D target = FindRandomLocation(observation->GetGameInfo());
-                            Actions()->UnitCommand(soldier, ABILITY_ID::SMART, target);
-                        }
-                    }
-                    else {
-                        Units bases = observation->GetUnits(Unit::Alliance::Self, IsTownHall());
-                        if (!bases.empty()) {
-                            Point2D target = GetRandomEntry(bases)->pos;
-                            Actions()->UnitCommand(soldier, ABILITY_ID::SMART, target);
-                        }
-                    }
-                    break;
-                 
-                }
-                case UNIT_TYPEID::ZERG_DRONE: {
-                    if (CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) < 1) {
-                       // const Unit* near_enemy = GetNearestEnemy(soldier->pos);
-                       // if (near_enemy != nullptr && Distance2D(near_enemy->pos, soldier->pos) <= 20.0f) {
-                           // defend(soldier, observation);
-                        //}
-                    }
-                    break;
-                }
-                default:
-                    break;
-                }
-                */
+                
             }
 
         return true;
@@ -253,7 +185,7 @@ private:
     }
 
     // Groups up to any other unit in the set of units
-    bool GroupUp(const Unit* soldier, const Units army, float group_distance) {
+    bool GroupUp(const Unit* soldier, const Units army, float group_distance,ABILITY_ID ability = ABILITY_ID::ATTACK_ATTACK) {
         Units farSoldier;
         for (const auto& other : army) {
             if (Distance2D(other->pos, soldier->pos) > group_distance) {
@@ -262,7 +194,7 @@ private:
         }
         const Unit* rally = GetNearestUnit(soldier->pos, farSoldier);
         if (rally != nullptr) {
-            Actions()->UnitCommand(soldier, ABILITY_ID::ATTACK_ATTACK, rally->pos);
+            Actions()->UnitCommand(soldier, ability, rally->pos);
             return true;
         }
         return false;
@@ -407,10 +339,11 @@ private:
         size_t bang_count = 0;
         size_t roach_count = 0;
         size_t hydra_count = 0;
+        size_t overseer_count = 0;
 
         size_t number_of_bases = CountUnitType(UNIT_TYPEID::ZERG_HATCHERY) + CountUnitType(UNIT_TYPEID::ZERG_LAIR);
-        if (CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) >= 20 || CountUnitType(UNIT_TYPEID::ZERG_HYDRALISK) >= 4) {
-            drone_count = number_of_bases * 21;
+        if (observation->GetUnits(Unit::Alliance::Self,IsArmy()).size() >= 20) {
+            drone_count = number_of_bases * 16;
         }
         drone_count = CountUnitType(UNIT_TYPEID::ZERG_HATCHERY) * 20;
 
@@ -427,10 +360,10 @@ private:
         }
         if (CountUnitType(UNIT_TYPEID::ZERG_ROACHWARREN) >= 1) {
             roach_count = 20;
-            ling_count = 30;
         }
         if (CountUnitType(UNIT_TYPEID::ZERG_HYDRALISKDEN) >= 1) {
-            ling_count = 20;
+            overseer_count = 2;
+            ling_count = 30;
             hydra_count = 50;
         }
         
@@ -438,7 +371,9 @@ private:
         TryTrainUnits(UNIT_TYPEID::ZERG_OVERLORD, ABILITY_ID::TRAIN_OVERLORD, overlord_count, observation);
         TryTrainUnits(UNIT_TYPEID::ZERG_HYDRALISK, ABILITY_ID::TRAIN_HYDRALISK, hydra_count, observation);
         TryTrainUnits(UNIT_TYPEID::ZERG_ZERGLING, ABILITY_ID::TRAIN_ZERGLING, ling_count, observation);
+        TryTrainUnits(UNIT_TYPEID::ZERG_ROACH, ABILITY_ID::TRAIN_ROACH, roach_count, observation);
         TryTrainUnits(UNIT_TYPEID::ZERG_BANELING, ABILITY_ID::TRAIN_BANELING, bang_count, observation,UNIT_TYPEID::ZERG_BANELINGCOCOON,UNIT_TYPEID::ZERG_ZERGLING);
+        TryTrainUnits(UNIT_TYPEID::ZERG_OVERSEER, ABILITY_ID::MORPH_OVERSEER, overseer_count, observation, UNIT_TYPEID::ZERG_OVERLORDCOCOON, UNIT_TYPEID::ZERG_OVERLORD);
 
         return true;
     }
@@ -448,7 +383,7 @@ private:
         Units eggs = observation->GetUnits(Unit::Alliance::Self, IsUnit(morph_type));
         for (const auto& egg : eggs) {
             if (!egg->orders.empty()) {
-                if (egg->orders.front().ability_id == ability_type) {
+                if (egg->orders.front().ability_id == ability_type) {// || morph_type == UNIT_TYPEID::ZERG_OVERLORDCOCOON || morph_type == UNIT_TYPEID::ZERG_BANELINGCOCOON) {
                     number_existing_units++;
                 }
             }
@@ -484,17 +419,20 @@ private:
             else if (CountUnitType(UNIT_TYPEID::ZERG_BANELINGNEST) < 1) {
                 TryBuildStructure(ABILITY_ID::BUILD_BANELINGNEST);
             }
+            else if (CountUnitType(UNIT_TYPEID::ZERG_ROACHWARREN) < 1) {
+                TryBuildStructure(ABILITY_ID::BUILD_ROACHWARREN);
+            }
             else if (CountUnitType(UNIT_TYPEID::ZERG_LAIR) < 1) {
                 const Unit* hatch = nullptr;
                 if (GetRandomUnit(hatch, observation, UNIT_TYPEID::ZERG_HATCHERY)) {
                     Actions()->UnitCommand(hatch, ABILITY_ID::MORPH_LAIR);
                 }
             }
-            else if (CountUnitType(UNIT_TYPEID::ZERG_HYDRALISKDEN) < 1 && CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) > 20) {
+            else if (CountUnitType(UNIT_TYPEID::ZERG_HYDRALISKDEN) < 1 && observation->GetUnits(Unit::Alliance::Self, IsArmy()).size()  > 20) {
                 TryBuildStructure(ABILITY_ID::BUILD_HYDRALISKDEN);
             }
         }
-        if (CountUnitType(UNIT_TYPEID::ZERG_LARVA) <= 1 && observation->GetMinerals() >= 400 && CountUnitType(UNIT_TYPEID::ZERG_HATCHERY) < 5) {
+        if (CountUnitType(UNIT_TYPEID::ZERG_LARVA) <= 1 && observation->GetMinerals() >= 300 && CountUnitType(UNIT_TYPEID::ZERG_HATCHERY) < 5) {
             TryBuildExpantion();
         }
         return true;
