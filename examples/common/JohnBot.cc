@@ -359,7 +359,7 @@ private:
             }
         }
         if (CountUnitType(UNIT_TYPEID::ZERG_ROACHWARREN) >= 1) {
-            roach_count = 20;
+            roach_count = 15;
         }
         if (CountUnitType(UNIT_TYPEID::ZERG_HYDRALISKDEN) >= 1) {
             overseer_count = 2;
