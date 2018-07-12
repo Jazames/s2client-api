@@ -8,7 +8,7 @@ using namespace sc2;
 class Party_Boi : public Agent {
 public:
     virtual void OnGameStart() final {
-        std::cout << "Hello, World!" << std::endl;
+        std::cout << "I'm a Turtle." << std::endl;
         auto doods = Observation()->GetUnits(Unit::Alliance::Self);
         for(auto dood : doods){
             if(dood->unit_type == UNIT_TYPEID::TERRAN_COMMANDCENTER)
@@ -28,14 +28,14 @@ public:
             TryBuildFactory();
             TryBuildArmory();
             TryBuildStarport();
-        }
-        virtual void OnUnitCreated(const Unit* unit) final {
+            
             //Now try telling all Idle buildings to start working again.
             auto lazy_doodz = Observation()->GetUnits(Unit::Alliance::Self, IsIdle());
             for(auto laze : lazy_doodz){
                 OnUnitIdle(laze);
             }
-            
+        }
+        virtual void OnUnitCreated(const Unit* unit) final {
             //std::cout << "Unit created: " << unit->unit_type.to_string() << std::endl;
             switch(unit->unit_type.ToType())
             {
@@ -60,11 +60,12 @@ public:
             //std::cout << "Unit order size: " << unit->orders.size() << std::endl;
             switch(unit->unit_type.ToType())
             {
-                case UNIT_TYPEID::TERRAN_COMMANDCENTER:{
-                    //Actions()->UnitCommand(unit, ABILITY_ID::TRAIN_SCV);
+                case UNIT_TYPEID::TERRAN_COMMANDCENTER:
+                    TryBuildFortress();
+                case UNIT_TYPEID::TERRAN_PLANETARYFORTRESS:
+                case UNIT_TYPEID::TERRAN_ORBITALCOMMAND:
                     TryBuildSCV(unit);
                     break;
-                }
                 case UNIT_TYPEID::TERRAN_SCV: {
                     MineIdleWorkers(unit, ABILITY_ID::HARVEST_GATHER_SCV);
                     break;
@@ -72,15 +73,18 @@ public:
                 case UNIT_TYPEID::TERRAN_BARRACKSFLYING:
                 case UNIT_TYPEID::TERRAN_BARRACKS:{
                     //std::cout << Observation()->GetUnit(unit->add_on_tag) << std::endl;
-                    if(Observation()->GetUnit(unit->add_on_tag)){//->unit_type == UNIT_TYPEID::TERRAN_REACTOR){
+                    if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_REACTOR)){
+                        TryBuildSoldier(unit);
+                    }
+                    else if(Observation()->GetUnit(unit->add_on_tag)){
                         TryBuildSoldier(unit);
                         //TryBuildSoldier(unit);
                     }
-                    else if(CountUnitType(Observation(), UNIT_TYPEID::TERRAN_BARRACKSREACTOR) < CountUnitType(Observation(), UNIT_TYPEID::TERRAN_BARRACKSTECHLAB)){
-                        TryBuildAddon(unit, ABILITY_ID::BUILD_REACTOR_BARRACKS);
+                    else if(CountUnitType(Observation(), UNIT_TYPEID::TERRAN_BARRACKSREACTOR) > CountUnitType(Observation(), UNIT_TYPEID::TERRAN_BARRACKSTECHLAB)){
+                        TryBuildAddon(unit, ABILITY_ID::BUILD_TECHLAB_BARRACKS);
                     }
                     else {
-                        TryBuildAddon(unit, ABILITY_ID::BUILD_TECHLAB_BARRACKS);
+                        TryBuildAddon(unit, ABILITY_ID::BUILD_REACTOR_BARRACKS);
                     }
                     break;
                 }
@@ -93,6 +97,24 @@ public:
                     Actions()->UnitCommand(unit, ABILITY_ID::RESEARCH_CONCUSSIVESHELLS);
                     Actions()->UnitCommand(unit, ABILITY_ID::RESEARCH_STIMPACK);
                     break;
+                case UNIT_TYPEID::TERRAN_FACTORYTECHLAB:
+                    Actions()->UnitCommand(unit, ABILITY_ID::RESEARCH_INFERNALPREIGNITER);
+                    break;
+                case UNIT_TYPEID::TERRAN_FACTORYFLYING:
+                case UNIT_TYPEID::TERRAN_FACTORY:{
+                    //std::cout << Observation()->GetUnit(unit->add_on_tag) << std::endl;
+                    if(Observation()->GetUnit(unit->add_on_tag)){//->unit_type == UNIT_TYPEID::TERRAN_REACTOR){
+                        TryBuildHellbat(unit);
+                        //TryBuildSoldier(unit);
+                    }
+                    else if(CountUnitType(Observation(), UNIT_TYPEID::TERRAN_TECHLAB) < 1){
+                        TryBuildAddon(unit, ABILITY_ID::BUILD_TECHLAB_FACTORY);
+                    }
+                    else {
+                        TryBuildAddon(unit, ABILITY_ID::BUILD_REACTOR_FACTORY);
+                    }
+                    break;
+                }
                 case UNIT_TYPEID::TERRAN_STARPORT:
                     TryBuildMedivac(unit);
                 default:
@@ -101,10 +123,21 @@ public:
         }
         virtual void OnUnitDestroyed(const Unit* unit)
         {
-            //Now try telling all Idle buildings to start working again.
-            auto lazy_doodz = Observation()->GetUnits(Unit::Alliance::Self, IsIdle());
-            for(auto laze : lazy_doodz){
-                OnUnitIdle(laze);
+            //Only care if it's a friendly killed.
+            if(unit->alliance != Unit::Alliance::Self)
+            {
+                return;
+            }
+            auto doodz = Observation()->GetUnits(Unit::Alliance::Self, IsArmy(Observation()));
+            Actions()->UnitCommand(doodz, ABILITY_ID::SCAN_MOVE, unit->pos, false);
+            if(IsTownHall()(*unit))
+            {
+                Actions()->SendChat("That was Gay!");
+            }
+            if(unit->unit_type.ToType() == UNIT_TYPEID::TERRAN_SCV)
+            {
+                auto frenz = Observation()->GetUnits(Unit::Alliance::Self);
+                Actions()->UnitCommand(frenz, ABILITY_ID::ATTACK_ATTACK, unit->pos, false);
             }
         }
         virtual void OnUnitEnterVision(const Unit* unit)
@@ -175,6 +208,16 @@ public:
             }
         };
         
+        bool HaveSufficientMaterials(UNIT_TYPEID unit_type)
+        {
+            auto data = Observation()->GetUnitTypeData();
+            auto mineral_cost = data[(int)unit_type].mineral_cost;
+            auto vespene_cost = data[(int)unit_type].vespene_cost;
+            auto food_cost = data[(int)unit_type].food_required;
+            
+            return Observation()->GetMinerals() >= mineral_cost && Observation()->GetVespene() >= vespene_cost && (Observation()->GetFoodCap() - Observation()->GetFoodUsed()) >= food_cost;
+        }
+        
         bool TryBuildAddon(const Unit* unit_to_build, ABILITY_ID ability_id_for_build_type)
         {
             float rx = GetRandomScalar();
@@ -191,6 +234,17 @@ public:
             CountUnitType(Observation(), UNIT_TYPEID::TERRAN_ORBITALCOMMAND) +
             CountUnitType(Observation(), UNIT_TYPEID::TERRAN_PLANETARYFORTRESS);
             
+            if(Observation()->GetFoodUsed() < townhalls * 40 && Observation()->GetMinerals() < 500)
+            {
+                return false;
+            }
+            
+            start_saving_for_expand = true;
+            
+            if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_COMMANDCENTER)){
+                return false;
+            }
+            
             // if a unit is already building a structure of this type, do nothing.
             Units units = Observation()->GetUnits(Unit::Alliance::Self);
             for (const auto& unit : units) {
@@ -201,14 +255,6 @@ public:
                     }
                 }
             }
-            
-            if(Observation()->GetFoodUsed() < townhalls * 40 && Observation()->GetMinerals() < 8000)
-            {
-                return false;
-            }
-            
-            start_saving_for_expand = true;
-            
             if(Observation()->GetMinerals() < 500)
             {
                 return false;
@@ -221,6 +267,12 @@ public:
             
             Point3D closest_expansion;
             auto expansions = search::CalculateExpansionLocations(Observation(), Query());
+            
+            //Don't try to expand if everything is taken. 
+            if(Observation()->GetUnits(IsTownHall()).size() >= expansions.size()){
+                return false;
+            }
+            
             for (const auto& expansion : expansions) {
                 float current_distance = Distance2D(start_location, expansion);
                 if (current_distance < .01f) {
@@ -247,16 +299,40 @@ public:
              return false;
              */
         }
+        bool TryBuildFortress()
+        {
+            if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_PLANETARYFORTRESS)){
+                return false;
+            }
+            if(start_saving_for_expand){
+                //return false;
+            }
+            std::cout << "Trying to build Planetary Fortress" << std::endl;
+            for(auto com : units){
+                Actions()->UnitCommand(com, ABILITY_ID::MORPH_PLANETARYFORTRESS);
+            }
+            
+            return true;
+        }
         
         bool TryBuildBarracks()
         {
+            if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_BARRACKS)){
+                return false;
+            }
             if(start_saving_for_expand){
                 return false;
             }
-            if(!(CountUnitType(Observation(), UNIT_TYPEID::TERRAN_BARRACKS) < Observation()->GetFoodCap()/10))
+            if(!(CountUnitType(Observation(), UNIT_TYPEID::TERRAN_BARRACKS) < 5))
             {
                 return false;
             }
+            if(!(CountUnitType(Observation(), UNIT_TYPEID::TERRAN_BARRACKS) < Observation()->GetFoodCap()/16))
+            {
+                return false;
+            }
+            
+            
             
             //Try to make a barracks
             float rx = GetRandomScalar();
@@ -272,6 +348,9 @@ public:
         
         bool TryBuildEngineeringBay()
         {
+            if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_ENGINEERINGBAY)){
+                return false;
+            }
             if(start_saving_for_expand){
                 return false;
             }
@@ -295,6 +374,9 @@ public:
                                      );
         }
         bool TryBuildFactory(){
+            if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_FACTORY)){
+                return false;
+            }
             if(start_saving_for_expand){
                 return false;
             }
@@ -318,6 +400,9 @@ public:
                                      );
         }
         bool TryBuildArmory(){
+            if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_ARMORY)){
+                return false;
+            }
             if(start_saving_for_expand){
                 return false;
             }
@@ -341,6 +426,9 @@ public:
                                      );
         }
         bool TryBuildStarport(){
+            if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_STARPORT)){
+                return false;
+            }
             if(start_saving_for_expand){
                 return false;
             }
@@ -408,14 +496,38 @@ public:
             if(barracks->unit_type != UNIT_TYPEID::TERRAN_BARRACKS){
                 return false;
             }
-            if(barracks->add_on_tag && Observation()->GetUnit(barracks->add_on_tag)->unit_type == UNIT_TYPEID::TERRAN_BARRACKSTECHLAB){
+            if(barracks->add_on_tag && Observation()->GetUnit(barracks->add_on_tag)->unit_type == UNIT_TYPEID::TERRAN_BARRACKSTECHLAB && HaveSufficientMaterials(UNIT_TYPEID::TERRAN_MARAUDER)){
+            
+                for (const auto& order : barracks->orders) {
+                    if (order.ability_id == ABILITY_ID::TRAIN_MARAUDER) {
+                        return false;
+                    }
+                }
                 Actions()->UnitCommand(barracks, ABILITY_ID::TRAIN_MARAUDER);
             }
-            else if(barracks->add_on_tag){
+            else if(barracks->add_on_tag && HaveSufficientMaterials(UNIT_TYPEID::TERRAN_MARINE)){
+                int i = 0;
+                for (const auto& order : barracks->orders) {
+                    if (order.ability_id == ABILITY_ID::TRAIN_MARINE) {
+                        i++;
+                    }
+                    if(i>1){
+                        return false;
+                    }
+                }
                 Actions()->UnitCommand(barracks, ABILITY_ID::TRAIN_MARINE);
-                Actions()->UnitCommand(barracks, ABILITY_ID::TRAIN_MARINE);
+                //Make a second marine if there's enough money.
+                if(HaveSufficientMaterials(UNIT_TYPEID::TERRAN_MARINE)){
+                    Actions()->UnitCommand(barracks, ABILITY_ID::TRAIN_MARINE);
+                }
             }
             else{
+                
+                for (const auto& order : barracks->orders) {
+                    if (order.ability_id == ABILITY_ID::TRAIN_MARINE) {
+                        return false;
+                    }
+                }
                 Actions()->UnitCommand(barracks, ABILITY_ID::TRAIN_MARINE);
             }
             return true;
@@ -423,18 +535,49 @@ public:
         
         bool TryBuildMedivac(const Unit* starport)
         {
+            if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_MEDIVAC)){
+                return false;
+            }
             if(start_saving_for_expand){
                 return false;
             }
             if(starport->unit_type != UNIT_TYPEID::TERRAN_STARPORT){
                 return false;
             }
+            for (const auto& order : starport->orders) {
+                if (order.ability_id == ABILITY_ID::TRAIN_MEDIVAC) {
+                    return false;
+                }
+            }
             Actions()->UnitCommand(starport, ABILITY_ID::TRAIN_MEDIVAC);
-        
+            
+            return true;
+        }
+        bool TryBuildHellbat(const Unit* factory)
+        {
+            if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_HELLION)){
+                return false;
+            }
+            if(start_saving_for_expand){
+                return false;
+            }
+            if(factory->unit_type != UNIT_TYPEID::TERRAN_FACTORY){
+                return false;
+            }
+            for (const auto& order : factory->orders) {
+                if (order.ability_id == ABILITY_ID::TRAIN_HELLBAT) {
+                    return false;
+                }
+            }
+            Actions()->UnitCommand(factory, ABILITY_ID::TRAIN_HELLBAT);
             return true;
         }
         
         bool TryBuildSCV(const Unit* command_center){
+            
+            if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_SCV)){
+                return false;
+            }
             
             //If the unit is not a town hall, quit now!
             //Hopefully this function is never given a non-town hall, but you never know.
@@ -456,6 +599,12 @@ public:
             if (bases.empty()) {
                 //TODO: Try to expand
                 return false;
+            }
+            
+            for (const auto& order : command_center->orders) {
+                if (order.ability_id == ABILITY_ID::TRAIN_SCV) {
+                    return false;
+                }
             }
             
             for (const auto& geyser : geysers) {
@@ -559,10 +708,15 @@ public:
         }
         
         bool TryBuildRefinery(){
+            if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_REFINERY)){
+                return false;
+            }
             if(start_saving_for_expand){
                 return false;
             }
-            if(Observation()->GetMinerals() < 100){
+            
+            //Don't build gas before a barracks.
+            if(CountUnitType(Observation(), UNIT_TYPEID::TERRAN_BARRACKS) < 1){
                 return false;
             }
             
@@ -577,6 +731,9 @@ public:
             return TryBuildStructure(ABILITY_ID::BUILD_REFINERY, builder, geyser);
         }
         bool TryBuildSupplyDepot(){
+            if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_SUPPLYDEPOT)){
+                return false;
+            }
             if(start_saving_for_expand){
                 return false;
             }
