@@ -61,7 +61,7 @@ public:
             switch(unit->unit_type.ToType())
             {
                 case UNIT_TYPEID::TERRAN_COMMANDCENTER:
-                    TryBuildFortress();
+                    TryBuildFortress(unit);
                 case UNIT_TYPEID::TERRAN_PLANETARYFORTRESS:
                 case UNIT_TYPEID::TERRAN_ORBITALCOMMAND:
                     TryBuildSCV(unit);
@@ -299,7 +299,7 @@ public:
              return false;
              */
         }
-        bool TryBuildFortress()
+        bool TryBuildFortress(const Unit* command_center)
         {
             if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_PLANETARYFORTRESS)){
                 return false;
@@ -307,10 +307,14 @@ public:
             if(start_saving_for_expand){
                 //return false;
             }
-            std::cout << "Trying to build Planetary Fortress" << std::endl;
-            for(auto com : units){
-                Actions()->UnitCommand(com, ABILITY_ID::MORPH_PLANETARYFORTRESS);
+            if(command_center->unit_type.ToType() != UNIT_TYPEID::TERRAN_COMMANDCENTER)
+            {
+                return false;
             }
+            std::cout << "Trying to build Planetary Fortress" << std::endl;
+            
+            Actions()->UnitCommand(command_center, ABILITY_ID::MORPH_PLANETARYFORTRESS);
+            
             
             return true;
         }
