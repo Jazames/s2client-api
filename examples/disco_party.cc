@@ -25,9 +25,9 @@ int main(int argc, char* argv[]) {
     Human james;
     
     coordinator.SetParticipants({
-        CreateParticipant(Race::Terran, &james),
-        CreateParticipant(Race::Terran, &boi)
-        //CreateComputer(Race::Terran, Difficulty::VeryHard)
+        //CreateParticipant(Race::Terran, &james),
+        CreateParticipant(Race::Terran, &boi),
+        CreateComputer(Race::Terran, Difficulty::VeryHard)
         });
 
     coordinator.LaunchStarcraft();
