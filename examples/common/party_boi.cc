@@ -8,10 +8,14 @@ using namespace sc2;
 class Party_Boi : public Agent {
 private:
     std::vector<Point3D> m_expansions;
-    bool expanding = false;
-    bool start_saving_for_expand = false;
+    bool m_expanding = false;
+    bool m_start_saving_for_expand = false;
 public:
     virtual void OnGameStart() final {
+        //Need to reset all variables, for when the ai is immediate loaded into consecutive games.
+        m_expanding = false;
+        m_start_saving_for_expand = false;
+        
         std::cout << "I'm a Turtle." << std::endl;
         auto doods = Observation()->GetUnits(Unit::Alliance::Self, IsUnit(UNIT_TYPEID::TERRAN_COMMANDCENTER));
         for(auto dood : doods){
@@ -61,7 +65,7 @@ public:
                      */
                     break;
                 case UNIT_TYPEID::TERRAN_COMMANDCENTER:
-                    expanding = false;
+                    m_expanding = false;
                     break;
                 default:
                     break;
@@ -80,11 +84,13 @@ public:
                 Actions()->SendChat("That was Gay!");
             }
             
+            /*
             if(unit->unit_type.ToType() == UNIT_TYPEID::TERRAN_SCV && Observation()->GetFoodArmy() < 30 && Observation()->GetUnits(Unit::Alliance::Enemy).size() < 20)
             {
                 auto frenz = Observation()->GetUnits(Unit::Alliance::Self);
                 Actions()->UnitCommand(frenz, ABILITY_ID::ATTACK_ATTACK, unit->pos, false);
             }
+            */
             ConsiderAttack(unit->pos);
             
  
@@ -164,6 +170,34 @@ public:
             return Observation()->GetMinerals() >= mineral_cost && Observation()->GetVespene() >= vespene_cost && (Observation()->GetFoodCap() - Observation()->GetFoodUsed()) >= food_cost;
         }
         
+        Units GetUnitsInArea(Unit::Alliance alliance, Point2D pos, float radius){
+            Units doodz;
+            auto peepz = Observation()->GetUnits(alliance);
+            for(auto peep : peepz)
+            {
+                auto distance_x = pos.x - peep->pos.x;
+                auto distance_y = pos.y - peep->pos.y;
+                auto distance = std::sqrt(distance_x * distance_x + distance_y * distance_y);
+                if(distance <= radius)
+                {
+                    doodz.push_back(peep);
+                }
+            }
+            return doodz;
+        }
+        
+        bool GroupContainsUnitType(UNIT_TYPEID unit_type, Units units)
+        {
+            for(auto dood : units)
+            {
+                if(unit_type == dood->unit_type)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
         bool TryBuildAddon(const Unit* unit_to_build, ABILITY_ID ability_id_for_build_type)
         {
             if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_TECHLAB) && !HaveSufficientMaterials(UNIT_TYPEID::TERRAN_REACTOR)){
@@ -186,7 +220,7 @@ public:
             if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_REFINERY)){
                 return false;
             }
-            if(start_saving_for_expand){
+            if(m_start_saving_for_expand){
                 return false;
             }
             
@@ -214,7 +248,7 @@ public:
             if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_SUPPLYDEPOT)){
                 return false;
             }
-            if(start_saving_for_expand){
+            if(m_start_saving_for_expand){
                 return false;
             }
             const ObservationInterface* observation = Observation();
@@ -234,25 +268,25 @@ public:
             float ry = GetRandomScalar();
             
             auto builder = GetBuilder();
+            bool build_in_parallel = observation->GetFoodUsed() >= observation->GetFoodCap();
             
             return TryBuildStructure(ABILITY_ID::BUILD_SUPPLYDEPOT,
                                      builder,
-                                     Point2D(builder->pos.x + rx * 15.0f, builder->pos.y + ry * 15.0f)
+                                     Point2D(builder->pos.x + rx * 15.0f, builder->pos.y + ry * 15.0f),
+                                     build_in_parallel
                                      );
         }
         
         bool TryExpand() {
-            auto townhalls = CountUnitType(Observation(), UNIT_TYPEID::TERRAN_COMMANDCENTER) +
-            CountUnitType(Observation(), UNIT_TYPEID::TERRAN_ORBITALCOMMAND) +
-            CountUnitType(Observation(), UNIT_TYPEID::TERRAN_PLANETARYFORTRESS);
+            auto townhalls = CountUnitType(Observation(), IsTownHall());
             
-            if(Observation()->GetFoodUsed() < townhalls * 30 && Observation()->GetMinerals() < 500)
+            if(!((Observation()->GetFoodUsed() > townhalls * 30 && townhalls < 2) || (Observation()->GetFoodUsed() > townhalls * 40) || Observation()->GetMinerals() > 1000))
             {
-                //start_saving_for_expand = false;
+                m_start_saving_for_expand = false;
                 return false;
             }
             
-            start_saving_for_expand = true;
+            m_start_saving_for_expand = true;
             
             if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_COMMANDCENTER)){
                 return false;
@@ -263,7 +297,7 @@ public:
             for (const auto& unit : units) {
                 for (const auto& order : unit->orders) {
                     if (order.ability_id == ABILITY_ID::BUILD_COMMANDCENTER) {
-                        start_saving_for_expand = false;
+                        m_start_saving_for_expand = false;
                         return false;
                     }
                 }
@@ -296,7 +330,8 @@ public:
                 }
             }
             auto builder = GetBuilder();
-            expanding = TryBuildStructure(ABILITY_ID::BUILD_COMMANDCENTER, builder, closest_expansion);
+            m_expanding = TryBuildStructure(ABILITY_ID::BUILD_COMMANDCENTER, builder, closest_expansion);
+            m_start_saving_for_expand = !m_expanding;
             return true;
             /*
              //only update staging location up till 3 bases.
@@ -313,7 +348,7 @@ public:
             if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_PLANETARYFORTRESS)){
                 return false;
             }
-            if(start_saving_for_expand){
+            if(m_start_saving_for_expand){
                 return false;
             }
             if(command_center->unit_type.ToType() != UNIT_TYPEID::TERRAN_COMMANDCENTER)
@@ -332,7 +367,7 @@ public:
             if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_BARRACKS)){
                 return false;
             }
-            if(start_saving_for_expand){
+            if(m_start_saving_for_expand){
                 return false;
             }
             if(!(CountUnitType(Observation(), UNIT_TYPEID::TERRAN_BARRACKS) < 5))
@@ -363,7 +398,7 @@ public:
             if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_ENGINEERINGBAY)){
                 return false;
             }
-            if(start_saving_for_expand){
+            if(m_start_saving_for_expand){
                 return false;
             }
             if((CountUnitType(Observation(), UNIT_TYPEID::TERRAN_BARRACKS) < 1)){
@@ -389,7 +424,7 @@ public:
             if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_FACTORY)){
                 return false;
             }
-            if(start_saving_for_expand){
+            if(m_start_saving_for_expand){
                 return false;
             }
             if(Observation()->GetFoodArmy() < 30){
@@ -418,7 +453,7 @@ public:
             if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_ARMORY)){
                 return false;
             }
-            if(start_saving_for_expand){
+            if(m_start_saving_for_expand){
                 return false;
             }
             if((CountUnitType(Observation(), UNIT_TYPEID::TERRAN_FACTORY) < 1)){
@@ -444,7 +479,7 @@ public:
             if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_STARPORT)){
                 return false;
             }
-            if(start_saving_for_expand){
+            if(m_start_saving_for_expand){
                 return false;
             }
             if((CountUnitType(Observation(), UNIT_TYPEID::TERRAN_ARMORY) < 1)){
@@ -468,9 +503,10 @@ public:
         }
         
         bool ConsiderAttack(Point2D pos){
+            auto threat = GetUnitsInArea(Unit::Alliance::Enemy, pos, 10.0);
             
             //If they have many more doodz, don't do it.
-            auto num_baddies = Observation()->GetUnits(Unit::Alliance::Enemy).size();
+            auto num_baddies = Observation()->GetUnits(Unit::Alliance::Enemy, IsArmy(Observation())).size();
             
             
             auto doodz = Observation()->GetUnits(Unit::Alliance::Self, IsArmy(Observation()));
@@ -481,10 +517,32 @@ public:
                 Actions()->UnitCommand(doodz, ABILITY_ID::MOVE, Observation()->GetStartLocation());
                 return false;
             }
-            bool queue_order = false;
+            
+            /*
+            if(GroupContainsUnitType(UNIT_TYPEID::TERRAN_SIEGETANK, threat)){
+                Actions()->UnitCommand(doodz, ABILITY_ID::MOVE, pos);
+            }
+             */
+            
+            
+            
+            
+            bool queue_order = threat.size() < 5 ;
             Actions()->UnitCommand(doodz, ABILITY_ID::SCAN_MOVE, pos, queue_order);
             Actions()->UnitCommand(doodz, ABILITY_ID::ATTACK_ATTACK, pos, queue_order);
             
+            //Do a stim
+            auto medivacs = Observation()->GetUnits(Unit::Alliance::Self, IsUnit(UNIT_TYPEID::TERRAN_MEDIVAC));
+            if(num_baddies >= 0.5 * army_size && medivacs.size() > 0){
+                std::cout << "doing stim packs" << std::endl;
+                Actions()->UnitCommand(doodz, ABILITY_ID::EFFECT_STIM);
+            }
+            
+            //If there are more medivacs than doodz, then have the medivacs run away.
+            //auto medivacs = Observation()->GetUnits(Unit::Alliance::Self, IsUnit(UNIT_TYPEID::TERRAN_MEDIVAC));
+            if(medivacs.size() * 2 > army_size){
+                Actions()->UnitCommand(medivacs, ABILITY_ID::MOVE, Observation()->GetStartLocation());
+            }
             return true;
         }
         
@@ -526,7 +584,7 @@ public:
         
         bool TryBuildSoldier(const Unit* barracks)
         {
-            if(start_saving_for_expand){
+            if(m_start_saving_for_expand){
                 return false;
             }
             if(barracks->unit_type != UNIT_TYPEID::TERRAN_BARRACKS){
@@ -574,7 +632,7 @@ public:
             if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_MEDIVAC)){
                 return false;
             }
-            if(start_saving_for_expand){
+            if(m_start_saving_for_expand){
                 return false;
             }
             if(starport->unit_type != UNIT_TYPEID::TERRAN_STARPORT){
@@ -594,7 +652,7 @@ public:
             if(!HaveSufficientMaterials(UNIT_TYPEID::TERRAN_HELLION)){
                 return false;
             }
-            if(start_saving_for_expand){
+            if(m_start_saving_for_expand){
                 return false;
             }
             if(factory->unit_type != UNIT_TYPEID::TERRAN_FACTORY){
@@ -668,6 +726,10 @@ public:
             return observation->GetUnits(Unit::Alliance::Self, IsUnit(unit_type)).size();
         }
         
+        size_t CountUnitType(const ObservationInterface* observation, Filter filter) {
+            return observation->GetUnits(Unit::Alliance::Self, filter).size();
+        }
+        
         
         void thouShaltNotBeIdle(const Unit* unit) {
             //std::cout << "Unit order size: " << unit->orders.size() << std::endl;
@@ -739,6 +801,11 @@ public:
                     //Don't be ambitious until food cap reached.
                     if(Observation()->GetFoodUsed() < 200){
                         break;
+                    }
+                    
+                    auto baddies = Observation()->GetUnits(Unit::Alliance::Enemy);
+                    if(baddies.size() > 0){
+                        ConsiderAttack(baddies[0]->pos);
                     }
                     
                     //Tell a marine to scout attack a random expansion. It should be interesting.
@@ -883,19 +950,20 @@ public:
             return GetRandomEntry(workers);
         }
         
-        bool TryBuildStructure(ABILITY_ID ability_type_for_structure, const Unit* unit_to_build, Point2D position){
+        bool TryBuildStructure(ABILITY_ID ability_type_for_structure, const Unit* unit_to_build, Point2D position, bool build_in_parallel = false){
             //const ObservationInterface* observation = Observation();
             
             // if a unit is already building a structure of this type, do nothing.
             Units units = Observation()->GetUnits(Unit::Alliance::Self);
-            for (const auto& unit : units) {
-                for (const auto& order : unit->orders) {
-                    if (order.ability_id == ability_type_for_structure) {
-                        return false;
+            if(!build_in_parallel){
+                for (const auto& unit : units) {
+                    for (const auto& order : unit->orders) {
+                        if (order.ability_id == ability_type_for_structure) {
+                            return false;
+                        }
                     }
                 }
             }
-            
             if(!unit_to_build){
                 return false;
             }
@@ -908,15 +976,17 @@ public:
             //Observation()->IsPlacable(position) ? std::cout << "Can't build structure: " << building_name <<std::endl: std::cout << "It's cool" << std::endl;
             return true;
         }
-        bool TryBuildStructure(ABILITY_ID ability_type_for_structure, const Unit* unit_to_build, const Unit* position){
+        bool TryBuildStructure(ABILITY_ID ability_type_for_structure, const Unit* unit_to_build, const Unit* position, bool build_in_parallel = false){
             //const ObservationInterface* observation = Observation();
             
             // if a unit is already building a structure of this type, do nothing.
             Units units = Observation()->GetUnits(Unit::Alliance::Self);
-            for (const auto& unit : units) {
-                for (const auto& order : unit->orders) {
-                    if (order.ability_id == ability_type_for_structure) {
-                        return false;
+            if(!build_in_parallel){
+                for (const auto& unit : units) {
+                    for (const auto& order : unit->orders) {
+                        if (order.ability_id == ability_type_for_structure) {
+                            return false;
+                        }
                     }
                 }
             }
