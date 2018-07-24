@@ -65,15 +65,15 @@ public:
     virtual void OnStep() {
         const ObservationInterface* observation = Observation();
         uint32_t game_loop = Observation()->GetGameLoop();
-        TrainQueens(observation);
-        ManageLarva(observation);
-        ManageStructures(observation);
-        ManageQueens(observation);
-        if (game_loop % 20 == 0) {
+        if (game_loop % 10 == 1) TrainQueens(observation);
+        if (game_loop % 10 == 2) ManageLarva(observation);
+        if (game_loop % 10 == 3) ManageStructures(observation);
+        if (game_loop % 10 == 4) ManageQueens(observation);
+        if (game_loop % 20 == 5) {
             ManageArmy(observation);
         }
 
-        if (game_loop % 30 == 0) {
+        if (game_loop % 30 == 6) {
             ManageMining(observation);
         }
 
