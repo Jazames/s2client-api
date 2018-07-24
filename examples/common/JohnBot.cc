@@ -69,7 +69,10 @@ public:
         ManageLarva(observation);
         ManageStructures(observation);
         ManageQueens(observation);
-        ManageArmy(observation);
+        if (game_loop % 20 == 0) {
+            ManageArmy(observation);
+        }
+
         if (game_loop % 30 == 0) {
             ManageMining(observation);
         }
@@ -205,7 +208,7 @@ private:
 
     // Groups up to any other unit in the set of units
     bool GroupUp(const Unit* soldier, const Units army, float group_distance,ABILITY_ID ability = ABILITY_ID::ATTACK_ATTACK) {
-        if (Observation()->GetGameLoop() % 20 != 0) return true;
+        //if (Observation()->GetGameLoop() % 20 != 0) return true;
         Units farSoldier;
         for (const auto& other : army) {
             if (Distance2D(other->pos, soldier->pos) > group_distance) {
