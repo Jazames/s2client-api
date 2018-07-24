@@ -17,9 +17,9 @@ int main(int argc, char* argv[]) {
     JohnBot bot;
     
     coordinator.SetParticipants({
-        CreateParticipant(Race::Terran, &boi),
+       CreateParticipant(Race::Terran, &boi),
         CreateParticipant(Race::Zerg, &bot)
-       // CreateComputer(Race::Random, Difficulty::Medium)
+       // CreateComputer(Race::Random, Difficulty::VeryHard)
         });
 
     coordinator.LaunchStarcraft();
