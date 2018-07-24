@@ -5,6 +5,19 @@
 #include <iostream>
 using namespace sc2;
 
+struct IsCloked {
+    bool operator()(const Unit& unit) {
+        switch (unit.cloak)
+        {
+        case Unit::CloakState::Cloaked: return true;
+        case Unit::CloakState::CloakedDetected: return true;
+        default: return false;
+            break;
+        }
+    }
+};
+
+
 struct IsVespeneGeyser {
     bool operator()(const Unit& unit) {
         switch (unit.unit_type.ToType()) {
@@ -43,6 +56,7 @@ struct IsArmy {
 class JohnBot : public Agent {
 public:
     virtual void OnGameStart() final {
+        stage = 0;
         group_size = 20;
         attack_target = Observation()->GetGameInfo().enemy_start_locations.front();
         std::cout << "ZingRush Group Size:" << group_size << std::endl;
@@ -115,6 +129,7 @@ public:
     }
 
 private:
+    int stage;
     size_t group_size;
     Point2D attack_target;// = game_info.enemy_start_locations.front();
 
@@ -148,8 +163,8 @@ private:
                 switch (soldier->unit_type.ToType())
                 {
                 case UNIT_TYPEID::ZERG_OVERSEER: {
-                        GroupUp(soldier, army, GROUP_DISTANCE/2,ABILITY_ID::MOVE);
-
+                    //Units cloked_units = observation->GetUnits(Unit::Alliance::Enemy);
+                    GroupUp(soldier, army, GROUP_DISTANCE / 2, ABILITY_ID::SMART);
                     break;
                 }
                 default: {
@@ -190,6 +205,7 @@ private:
 
     // Groups up to any other unit in the set of units
     bool GroupUp(const Unit* soldier, const Units army, float group_distance,ABILITY_ID ability = ABILITY_ID::ATTACK_ATTACK) {
+        if (Observation()->GetGameLoop() % 20 != 0) return true;
         Units farSoldier;
         for (const auto& other : army) {
             if (Distance2D(other->pos, soldier->pos) > group_distance) {
@@ -356,16 +372,16 @@ private:
         if (CountUnitType(UNIT_TYPEID::ZERG_SPAWNINGPOOL) >= 1) {
             ling_count = 20;
         }
-        if (CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) > 15) {
+        if (CountUnitType(UNIT_TYPEID::ZERG_ZERGLING) > 15 && stage > 0) {
             if (CountUnitType(UNIT_TYPEID::ZERG_BANELINGNEST) >= 1) {
                 bang_count = 10;
             }
         }
-        if (CountUnitType(UNIT_TYPEID::ZERG_ROACHWARREN) >= 1) {
+        if (CountUnitType(UNIT_TYPEID::ZERG_ROACHWARREN) >= 1 && stage > 0) {
             roach_count = 15;
-            group_size = 30;
+            group_size = 40;
         }
-        if (CountUnitType(UNIT_TYPEID::ZERG_HYDRALISKDEN) >= 1) {
+        if (CountUnitType(UNIT_TYPEID::ZERG_HYDRALISKDEN) >= 1 && stage > 1) {
             overseer_count = 2;
             ling_count = 10;
             roach_count = 20;
@@ -410,6 +426,20 @@ private:
     bool ManageStructures(const ObservationInterface* observation) {
         size_t gases = 2;
         size_t army_size = observation->GetUnits(Unit::Alliance::Self, IsArmy()).size();
+       // std::cout << observation->GetGameLoop() << std::endl;
+        if (observation->GetGameLoop() % 1000 == 0) {
+            std::cout << stage << std::endl;
+        }
+
+        if ( stage < 1 && observation->GetGameLoop() > 6000 && army_size < 16) {
+            stage = 1;
+            std::cout << "Setting stage to 1" << std::endl;
+        }
+        else if (stage < 2 && observation->GetGameLoop() > 12000 && army_size > 20) {
+            stage = 2;
+            std::cout << "Setting stage to 2" << std::endl;
+        }
+
         if (CountUnitType(UNIT_TYPEID::ZERG_DRONE) >= 34) {
             gases = 4;
         }
@@ -423,19 +453,19 @@ private:
                     TryBuildGas(base->pos);
                 }
             }
-            else if (CountUnitType(UNIT_TYPEID::ZERG_BANELINGNEST) < 1) {
+            else if (CountUnitType(UNIT_TYPEID::ZERG_BANELINGNEST) < 1 && stage > 0) {
                 TryBuildStructure(ABILITY_ID::BUILD_BANELINGNEST);
             }
-            else if (CountUnitType(UNIT_TYPEID::ZERG_ROACHWARREN) < 1) {
+            else if (CountUnitType(UNIT_TYPEID::ZERG_ROACHWARREN) < 1 && stage > 0) {
                 TryBuildStructure(ABILITY_ID::BUILD_ROACHWARREN);
             }
-            else if (CountUnitType(UNIT_TYPEID::ZERG_LAIR) < 1) {
+            else if (CountUnitType(UNIT_TYPEID::ZERG_LAIR) < 1 && stage > 0) {
                 const Unit* hatch = nullptr;
                 if (GetRandomUnit(hatch, observation, UNIT_TYPEID::ZERG_HATCHERY)) {
                     Actions()->UnitCommand(hatch, ABILITY_ID::MORPH_LAIR);
                 }
             }
-            else if (CountUnitType(UNIT_TYPEID::ZERG_HYDRALISKDEN) < 1) {
+            else if (CountUnitType(UNIT_TYPEID::ZERG_HYDRALISKDEN) < 1 && stage > 1) {
                 TryBuildStructure(ABILITY_ID::BUILD_HYDRALISKDEN);
             }
         }
