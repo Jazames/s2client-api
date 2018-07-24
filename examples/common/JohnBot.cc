@@ -65,16 +65,30 @@ public:
     virtual void OnStep() {
         const ObservationInterface* observation = Observation();
         uint32_t game_loop = Observation()->GetGameLoop();
-        if (game_loop % 10 == 1) TrainQueens(observation);
-        if (game_loop % 10 == 2) ManageLarva(observation);
-        if (game_loop % 10 == 3) ManageStructures(observation);
-        if (game_loop % 10 == 4) ManageQueens(observation);
-        if (game_loop % 20 == 5) {
-            ManageArmy(observation);
+        switch (game_loop % 10) {
+        case 0: {
+            ManageLarva(observation);
+            break;
         }
-
-        if (game_loop % 30 == 6) {
+        case 1: {
+            ManageStructures(observation);
+            break;
+        }
+        case 3: {
             ManageMining(observation);
+            break;
+        }
+        case 4: {
+            TrainQueens(observation);
+            ManageQueens(observation);
+            break;
+        }
+        case 5: {
+            ManageArmy(observation);
+            break;
+        }
+        default:
+            break;
         }
 
 // std::cout << Observation()->GetGameLoop() << std::endl;
@@ -391,14 +405,21 @@ private:
             hydra_count = 50;
             group_size = 50;
         }
-        
-        TryTrainUnits(UNIT_TYPEID::ZERG_DRONE, ABILITY_ID::TRAIN_DRONE, drone_count, observation);
-        TryTrainUnits(UNIT_TYPEID::ZERG_OVERLORD, ABILITY_ID::TRAIN_OVERLORD, overlord_count, observation);
-        TryTrainUnits(UNIT_TYPEID::ZERG_HYDRALISK, ABILITY_ID::TRAIN_HYDRALISK, hydra_count, observation);
-        TryTrainUnits(UNIT_TYPEID::ZERG_ZERGLING, ABILITY_ID::TRAIN_ZERGLING, ling_count, observation);
-        TryTrainUnits(UNIT_TYPEID::ZERG_ROACH, ABILITY_ID::TRAIN_ROACH, roach_count, observation);
-        TryTrainUnits(UNIT_TYPEID::ZERG_BANELING, ABILITY_ID::TRAIN_BANELING, bang_count, observation,UNIT_TYPEID::ZERG_BANELINGCOCOON,UNIT_TYPEID::ZERG_ZERGLING);
-        TryTrainUnits(UNIT_TYPEID::ZERG_OVERSEER, ABILITY_ID::MORPH_OVERSEER, overseer_count, observation, UNIT_TYPEID::ZERG_OVERLORDCOCOON, UNIT_TYPEID::ZERG_OVERLORD);
+        if (observation->GetMinerals() >= 100)
+            TryTrainUnits(UNIT_TYPEID::ZERG_OVERLORD, ABILITY_ID::TRAIN_OVERLORD, overlord_count, observation);
+
+        if (observation->GetMinerals() >= 50) {
+            TryTrainUnits(UNIT_TYPEID::ZERG_DRONE, ABILITY_ID::TRAIN_DRONE, drone_count, observation);
+            TryTrainUnits(UNIT_TYPEID::ZERG_ZERGLING, ABILITY_ID::TRAIN_ZERGLING, ling_count, observation);
+        }
+        if (observation->GetMinerals() >= 100 && observation->GetVespene() >= 50)
+            TryTrainUnits(UNIT_TYPEID::ZERG_HYDRALISK, ABILITY_ID::TRAIN_HYDRALISK, hydra_count, observation);
+        if (observation->GetMinerals() >= 75 && observation->GetVespene() >= 25)
+            TryTrainUnits(UNIT_TYPEID::ZERG_ROACH, ABILITY_ID::TRAIN_ROACH, roach_count, observation);
+        if (observation->GetMinerals() >= 25 && observation->GetVespene() >= 25)
+            TryTrainUnits(UNIT_TYPEID::ZERG_BANELING, ABILITY_ID::TRAIN_BANELING, bang_count, observation,UNIT_TYPEID::ZERG_BANELINGCOCOON,UNIT_TYPEID::ZERG_ZERGLING);
+        if (observation->GetMinerals() >= 50 && observation->GetVespene() >= 50)
+            TryTrainUnits(UNIT_TYPEID::ZERG_OVERSEER, ABILITY_ID::MORPH_OVERSEER, overseer_count, observation, UNIT_TYPEID::ZERG_OVERLORDCOCOON, UNIT_TYPEID::ZERG_OVERLORD);
 
         return true;
     }
