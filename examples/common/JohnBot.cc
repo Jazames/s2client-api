@@ -616,7 +616,8 @@ private:
 
             if (gas->assigned_harvesters < gas->ideal_harvesters) {
                 const Unit* drone = nullptr;
-                if (NearestDrone(drone, gas, observation)) {
+                GetRandomUnit(drone, observation, UNIT_TYPEID::ZERG_DRONE);
+                if (drone != nullptr) {
                     Actions()->UnitCommand(drone,ABILITY_ID::SMART,gas);
                 }
             }
